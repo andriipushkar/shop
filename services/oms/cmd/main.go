@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -77,6 +78,10 @@ func main() {
 				_, err = rabbitCh.QueueDeclare("order.created", true, false, false, false, nil)
 				if err != nil {
 					log.Printf("Warning: Failed to declare queue: %v", err)
+				}
+				_, err = rabbitCh.QueueDeclare("order.status.updated", true, false, false, false, nil)
+				if err != nil {
+					log.Printf("Warning: Failed to declare status queue: %v", err)
 				} else {
 					log.Println("Connected to RabbitMQ")
 				}
@@ -85,11 +90,22 @@ func main() {
 	}
 
 	http.HandleFunc("/orders", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+		switch r.Method {
+		case http.MethodPost:
+			createOrder(w, r, db, rabbitCh)
+		case http.MethodGet:
+			listOrders(w, r, db)
+		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
 		}
-		createOrder(w, r, db, rabbitCh)
+	})
+
+	http.HandleFunc("/orders/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch {
+			updateOrderStatus(w, r, db, rabbitCh)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -156,5 +172,93 @@ func createOrder(w http.ResponseWriter, r *http.Request, db *sql.DB, rabbitCh *a
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(o)
+}
+
+func listOrders(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	rows, err := db.Query("SELECT id, product_id, quantity, status, user_id, created_at FROM orders ORDER BY created_at DESC LIMIT 20")
+	if err != nil {
+		http.Error(w, "Failed to fetch orders", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var orders []Order
+	for rows.Next() {
+		var o Order
+		if err := rows.Scan(&o.ID, &o.ProductID, &o.Quantity, &o.Status, &o.UserID, &o.CreatedAt); err != nil {
+			continue
+		}
+		orders = append(orders, o)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(orders)
+}
+
+type StatusUpdateRequest struct {
+	Status string `json:"status"`
+}
+
+func updateOrderStatus(w http.ResponseWriter, r *http.Request, db *sql.DB, rabbitCh *amqp.Channel) {
+	// Extract order ID from path: /orders/{id}/status
+	path := strings.TrimPrefix(r.URL.Path, "/orders/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 {
+		http.Error(w, "Order ID required", http.StatusBadRequest)
+		return
+	}
+	orderID := parts[0]
+
+	var req StatusUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate status
+	validStatuses := map[string]bool{"NEW": true, "PROCESSING": true, "DELIVERED": true}
+	if !validStatuses[req.Status] {
+		http.Error(w, "Invalid status. Use: NEW, PROCESSING, DELIVERED", http.StatusBadRequest)
+		return
+	}
+
+	// Update in database
+	result, err := db.Exec("UPDATE orders SET status = $1 WHERE id = $2", req.Status, orderID)
+	if err != nil {
+		http.Error(w, "Failed to update order", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		http.Error(w, "Order not found", http.StatusNotFound)
+		return
+	}
+
+	// Get updated order for event
+	var o Order
+	err = db.QueryRow("SELECT id, product_id, quantity, status, user_id, created_at FROM orders WHERE id = $1", orderID).
+		Scan(&o.ID, &o.ProductID, &o.Quantity, &o.Status, &o.UserID, &o.CreatedAt)
+	if err != nil {
+		http.Error(w, "Failed to fetch updated order", http.StatusInternalServerError)
+		return
+	}
+
+	// Publish status update event
+	if rabbitCh != nil {
+		eventData, _ := json.Marshal(o)
+		err := rabbitCh.Publish("", "order.status.updated", false, false, amqp.Publishing{
+			ContentType: "application/json",
+			Body:        eventData,
+		})
+		if err != nil {
+			log.Printf("Failed to publish status event: %v", err)
+		} else {
+			log.Printf("Published order.status.updated event for %s -> %s", o.ID, o.Status)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(o)
 }

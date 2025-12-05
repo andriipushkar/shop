@@ -17,6 +17,14 @@ type Product struct {
 	SKU   string  `json:"sku"`
 }
 
+type Order struct {
+	ID        string `json:"id"`
+	ProductID string `json:"product_id"`
+	Quantity  int    `json:"quantity"`
+	Status    string `json:"status"`
+	UserID    int64  `json:"user_id"`
+}
+
 type Handler struct {
 	Bot     *tele.Bot
 	CoreURL string
@@ -38,10 +46,14 @@ func (h *Handler) RegisterRoutes() {
 	h.Bot.Handle("/products", h.OnListProducts)
 	h.Bot.Handle("/create", h.OnCreate)
 	h.Bot.Handle("/buy", h.OnBuy)
+	h.Bot.Handle("/orders", h.OnListOrders)
 	
-	// Register callback for "buy" button
+	// Register callbacks
 	btnBuy := tele.Btn{Unique: "buy"}
 	h.Bot.Handle(&btnBuy, h.OnBuyCallback)
+	
+	btnStatus := tele.Btn{Unique: "status"}
+	h.Bot.Handle(&btnStatus, h.OnStatusCallback)
 }
 
 type OrderRequest struct {
@@ -206,4 +218,96 @@ func (h *Handler) buyProduct(c tele.Context, productID string) error {
 
 	c.Respond(&tele.CallbackResponse{Text: "✅ Замовлення створено!"})
 	return c.Send(fmt.Sprintf("✅ Замовлення *%s* створено!", orderResp.ID), tele.ModeMarkdown)
+}
+
+func (h *Handler) OnListOrders(c tele.Context) error {
+	resp, err := h.Client.Get(h.OMSURL + "/orders")
+	if err != nil {
+		return c.Send("Помилка з'єднання з OMS: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return c.Send("Не вдалося отримати замовлення.")
+	}
+
+	var orders []Order
+	if err := json.NewDecoder(resp.Body).Decode(&orders); err != nil {
+		return c.Send("Помилка обробки даних.")
+	}
+
+	if len(orders) == 0 {
+		return c.Send("Замовлень поки немає.")
+	}
+
+	for _, o := range orders {
+		statusEmoji := map[string]string{
+			"NEW":        "🆕",
+			"PROCESSING": "⏳",
+			"DELIVERED":  "✅",
+		}
+		emoji := statusEmoji[o.Status]
+		if emoji == "" {
+			emoji = "📦"
+		}
+
+		msg := fmt.Sprintf("%s *%s*\nТовар: %s\nКількість: %d\nСтатус: *%s*",
+			emoji, o.ID, o.ProductID, o.Quantity, o.Status)
+
+		keyboard := &tele.ReplyMarkup{}
+		
+		var btns []tele.Btn
+		if o.Status != "PROCESSING" {
+			btns = append(btns, keyboard.Data("⏳ PROCESSING", "status", o.ID+"|PROCESSING"))
+		}
+		if o.Status != "DELIVERED" {
+			btns = append(btns, keyboard.Data("✅ DELIVERED", "status", o.ID+"|DELIVERED"))
+		}
+		
+		if len(btns) > 0 {
+			keyboard.Inline(keyboard.Row(btns...))
+		}
+
+		if err := c.Send(msg, tele.ModeMarkdown, keyboard); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (h *Handler) OnStatusCallback(c tele.Context) error {
+	data := c.Callback().Data
+	
+	// Parse "orderID|status"
+	var orderID, newStatus string
+	for i := len(data) - 1; i >= 0; i-- {
+		if data[i] == '|' {
+			orderID = data[:i]
+			newStatus = data[i+1:]
+			break
+		}
+	}
+
+	if orderID == "" || newStatus == "" {
+		return c.Respond(&tele.CallbackResponse{Text: "Помилка"})
+	}
+
+	// Send PATCH request
+	body := fmt.Sprintf(`{"status":"%s"}`, newStatus)
+	req, _ := http.NewRequest(http.MethodPatch, h.OMSURL+"/orders/"+orderID, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := h.Client.Do(req)
+	if err != nil {
+		return c.Respond(&tele.CallbackResponse{Text: "Помилка з'єднання"})
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return c.Respond(&tele.CallbackResponse{Text: "Не вдалося оновити статус"})
+	}
+
+	c.Respond(&tele.CallbackResponse{Text: "✅ Статус оновлено!"})
+	return c.Send(fmt.Sprintf("✅ Замовлення *%s* → *%s*", orderID, newStatus), tele.ModeMarkdown)
 }
