@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: shop
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  core:
+    build: ./services/core
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DATABASE_URL=postgres://user:password@postgres:5432/shop?sslmode=disable
+    depends_on:
+      - postgres
+
+  bot:
+    build: ./services/telegram-bot
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - CORE_SERVICE_URL=http://core:8080
+      - OMS_SERVICE_URL=http://oms:8081
+    depends_on:
+      - core
+
+  oms:
+    build: ./services/oms
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - DATABASE_URL=postgres://user:password@postgres:5432/shop?sslmode=disable
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+
+  notification:
+    build: ./services/notification
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    depends_on:
+      - rabbitmq
+
+volumes:
+  postgres_data:
