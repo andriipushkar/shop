@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"github.com/streadway/amqp"
 )
 
+var coreServiceURL string
+
 type Order struct {
 	ID        string    `json:"id"`
 	ProductID string    `json:"product_id"`
@@ -25,6 +28,12 @@ type Order struct {
 
 func main() {
 	log.Println("Starting OMS Service...")
+
+	coreServiceURL = os.Getenv("CORE_SERVICE_URL")
+	if coreServiceURL == "" {
+		coreServiceURL = "http://core:8080"
+	}
+	log.Printf("Core service URL: %s", coreServiceURL)
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -101,6 +110,15 @@ func main() {
 	})
 
 	http.HandleFunc("/orders/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/user/") {
+			if r.Method == http.MethodGet {
+				listUserOrders(w, r, db)
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+		
 		if r.Method == http.MethodPatch {
 			updateOrderStatus(w, r, db, rabbitCh)
 		} else {
@@ -138,10 +156,72 @@ func initDB(db *sql.DB) error {
 	return err
 }
 
+type Product struct {
+	ID    string  `json:"id"`
+	Stock int     `json:"stock"`
+	Price float64 `json:"price"`
+	Name  string  `json:"name"`
+}
+
+func checkStock(productID string, quantity int) (*Product, error) {
+	resp, err := http.Get(fmt.Sprintf("%s/products/%s", coreServiceURL, productID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to check stock: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("product not found")
+	}
+
+	var product Product
+	if err := json.NewDecoder(resp.Body).Decode(&product); err != nil {
+		return nil, fmt.Errorf("failed to decode product: %v", err)
+	}
+
+	if product.Stock < quantity {
+		return nil, fmt.Errorf("insufficient stock: available %d, requested %d", product.Stock, quantity)
+	}
+
+	return &product, nil
+}
+
+func decrementStock(productID string, quantity int) error {
+	body, _ := json.Marshal(map[string]int{"quantity": quantity})
+	resp, err := http.Post(
+		fmt.Sprintf("%s/products/%s/decrement", coreServiceURL, productID),
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to decrement stock: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to decrement stock: status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 func createOrder(w http.ResponseWriter, r *http.Request, db *sql.DB, rabbitCh *amqp.Channel) {
 	var o Order
 	if err := json.NewDecoder(r.Body).Decode(&o); err != nil {
 		http.Error(w, "Invalid body", http.StatusBadRequest)
+		return
+	}
+
+	// Check stock availability
+	_, err := checkStock(o.ProductID, o.Quantity)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Decrement stock
+	if err := decrementStock(o.ProductID, o.Quantity); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -150,8 +230,9 @@ func createOrder(w http.ResponseWriter, r *http.Request, db *sql.DB, rabbitCh *a
 	o.CreatedAt = time.Now()
 
 	query := `INSERT INTO orders (id, product_id, quantity, status, user_id, created_at) VALUES ($1, $2, $3, $4, $5, $6)`
-	_, err := db.Exec(query, o.ID, o.ProductID, o.Quantity, o.Status, o.UserID, o.CreatedAt)
+	_, err = db.Exec(query, o.ID, o.ProductID, o.Quantity, o.Status, o.UserID, o.CreatedAt)
 	if err != nil {
+		// TODO: rollback stock decrement on failure
 		http.Error(w, "Failed to save order: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -261,4 +342,34 @@ func updateOrderStatus(w http.ResponseWriter, r *http.Request, db *sql.DB, rabbi
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(o)
+}
+
+func listUserOrders(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	// Extract user ID from path: /orders/user/{userID}
+	path := strings.TrimPrefix(r.URL.Path, "/orders/user/")
+	userID := path
+	
+	if userID == "" {
+		http.Error(w, "User ID required", http.StatusBadRequest)
+		return
+	}
+
+	rows, err := db.Query("SELECT id, product_id, quantity, status, user_id, created_at FROM orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10", userID)
+	if err != nil {
+		http.Error(w, "Failed to fetch orders", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var orders []Order
+	for rows.Next() {
+		var o Order
+		if err := rows.Scan(&o.ID, &o.ProductID, &o.Quantity, &o.Status, &o.UserID, &o.CreatedAt); err != nil {
+			continue
+		}
+		orders = append(orders, o)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(orders)
 }

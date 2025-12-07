@@ -3,4 +3,7 @@ go 1.23.3
 use (
 	./services/core
 	./services/telegram-bot
+	./services/oms
+	./services/notification
+	./services/crm
 )

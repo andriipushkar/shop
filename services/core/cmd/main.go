@@ -22,7 +22,7 @@ func main() {
 
 	var db *sql.DB
 	var err error
-	
+
 	// Retry connection logic
 	for i := 0; i < 10; i++ {
 		db, err = sql.Open("postgres", dbURL)
@@ -42,8 +42,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize repository: %v", err)
 	}
-	
-	service := pim.NewService(repo)
+
+	// PostgresRepository implements both Repository and CategoryRepository
+	service := pim.NewService(repo, repo)
 	handler := transport.NewHandler(service)
 
 	port := os.Getenv("PORT")
@@ -56,14 +57,65 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
-	
+
 	// Product routes
+	mux.HandleFunc("/feed/rozetka", handler.GenerateFeed)
 	mux.HandleFunc("/products", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			handler.CreateProduct(w, r)
 		case http.MethodGet:
 			handler.ListProducts(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/products/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		// Handle stock endpoints
+		if len(path) > len("/products/") {
+			if path[len(path)-6:] == "/stock" {
+				handler.UpdateStock(w, r)
+				return
+			}
+			if len(path) > 10 && path[len(path)-10:] == "/decrement" {
+				handler.DecrementStock(w, r)
+				return
+			}
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			handler.GetProduct(w, r)
+		case http.MethodPut:
+			handler.UpdateProduct(w, r)
+		case http.MethodDelete:
+			handler.DeleteProduct(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Category routes
+	mux.HandleFunc("/categories", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			handler.CreateCategory(w, r)
+		case http.MethodGet:
+			handler.ListCategories(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/categories/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handler.GetCategory(w, r)
+		case http.MethodDelete:
+			handler.DeleteCategory(w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}

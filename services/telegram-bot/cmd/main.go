@@ -17,8 +17,9 @@ func main() {
 	}
 
 	pref := tele.Settings{
-		Token:  token,
-		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
+		Token:   token,
+		Poller:  &tele.LongPoller{Timeout: 10 * time.Second},
+		Verbose: true, // Debugging
 	}
 
 	b, err := tele.NewBot(pref)
@@ -36,7 +37,17 @@ func main() {
 		omsURL = "http://localhost:8081"
 	}
 
-	handler := bot.NewHandler(b, coreURL, omsURL)
+	crmURL := os.Getenv("CRM_SERVICE_URL")
+	if crmURL == "" {
+		crmURL = "http://localhost:8082"
+	}
+
+	// Remove any existing webhook to ensure long polling works
+	if err := b.RemoveWebhook(); err != nil {
+		log.Printf("Warning: could not remove webhook: %v", err)
+	}
+
+	handler := bot.NewHandler(b, coreURL, omsURL, crmURL)
 	handler.RegisterRoutes()
 
 	log.Println("Telegram Bot started")
