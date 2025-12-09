@@ -1,12 +1,34 @@
 import { getProducts, getCategories } from "@/lib/api";
 import ProductCard from "@/components/ProductCard";
+import HeroSection from "@/components/HeroSection";
+import PromoSection from "@/components/PromoSection";
 import { Suspense } from "react";
 import SearchFilterWrapper from "@/components/SearchFilterWrapper";
+import Link from "next/link";
+import { ArrowRightIcon } from "@heroicons/react/24/outline";
+import { products as mockProducts, categories as mockCategories, getRootCategories } from "@/lib/mock-data";
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+function ProductsSkeleton() {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {[...Array(8)].map((_, i) => (
+        <div key={i} className="bg-white rounded-2xl overflow-hidden shadow-sm animate-pulse">
+          <div className="aspect-square bg-gray-200" />
+          <div className="p-4 space-y-3">
+            <div className="h-4 bg-gray-200 rounded w-1/3" />
+            <div className="h-6 bg-gray-200 rounded w-3/4" />
+            <div className="h-8 bg-gray-200 rounded w-1/2" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default async function Home({ searchParams }: PageProps) {
@@ -19,47 +41,161 @@ export default async function Home({ searchParams }: PageProps) {
     categoryId: typeof params.category_id === 'string' ? params.category_id : undefined,
   };
 
-  const [products, categories] = await Promise.all([
-    getProducts(filter),
-    getCategories()
-  ]);
+  // Try API first, fallback to mock data
+  let apiProducts = await getProducts(filter);
+  let apiCategories = await getCategories();
+
+  // Use mock data if API returns empty
+  let products = apiProducts.length > 0 ? apiProducts : mockProducts.slice(0, 100);
+  let categories = apiCategories.length > 0 ? apiCategories : getRootCategories().map(c => ({ id: c.id, name: c.name }));
+
+  // Apply filters to mock data if needed
+  if (apiProducts.length === 0 && (filter.search || filter.minPrice || filter.maxPrice || filter.categoryId)) {
+    products = mockProducts.filter(p => {
+      if (filter.search && !p.name.toLowerCase().includes(filter.search.toLowerCase())) return false;
+      if (filter.minPrice && p.price < filter.minPrice) return false;
+      if (filter.maxPrice && p.price > filter.maxPrice) return false;
+      if (filter.categoryId && p.category_id !== filter.categoryId) return false;
+      return true;
+    }).slice(0, 100);
+  }
+
   const hasFilters = filter.search || filter.minPrice || filter.maxPrice || filter.categoryId;
+  const showHero = !hasFilters;
 
   return (
-    <main className="min-h-screen p-8 bg-gray-50">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-extrabold text-gray-900 mb-4">
-            Наші товари
-          </h1>
-          <p className="text-lg text-gray-600">
-            Оберіть товари та додайте їх до кошика
-          </p>
-        </div>
+    <main className="min-h-screen bg-gray-50">
+      {/* Hero Section - only show on main page without filters */}
+      {showHero && <HeroSection />}
 
-        <Suspense fallback={<div className="bg-white rounded-xl shadow-sm p-6 mb-8 animate-pulse h-24" />}>
-          <SearchFilterWrapper categories={categories} />
-        </Suspense>
+      {/* Promo Section - only show on main page without filters */}
+      {showHero && <PromoSection />}
 
-        {products.length === 0 ? (
-          <div className="text-center p-12 bg-white rounded-xl shadow-sm">
-            <p className="text-gray-500">
-              {hasFilters ? 'Товарів за вашим запитом не знайдено' : 'Товари не знайдено. Чи працює бекенд?'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {hasFilters && (
-              <p className="text-gray-600 mb-4">Знайдено товарів: {products.length}</p>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-              {products.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
+      {/* Products Section */}
+      <section className="py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Section Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+                {hasFilters ? 'Результати пошуку' : 'Наші товари'}
+              </h2>
+              {hasFilters && products.length > 0 && (
+                <p className="text-gray-500 mt-1">
+                  Знайдено {products.length} товар{products.length === 1 ? '' : products.length < 5 ? 'и' : 'ів'}
+                </p>
+              )}
             </div>
-          </>
-        )}
-      </div>
+            {!hasFilters && (
+              <Link
+                href="/category/all"
+                className="inline-flex items-center gap-2 text-teal-600 hover:text-teal-700 font-medium group"
+              >
+                Переглянути всі
+                <ArrowRightIcon className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </Link>
+            )}
+          </div>
+
+          {/* Search & Filter */}
+          <div className="mb-8">
+            <Suspense fallback={<div className="bg-white rounded-2xl shadow-sm p-6 animate-pulse h-24" />}>
+              <SearchFilterWrapper categories={categories} />
+            </Suspense>
+          </div>
+
+          {/* Products Grid */}
+          {products.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-2xl shadow-sm">
+              <div className="text-6xl mb-4">🔍</div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                {hasFilters ? 'Нічого не знайдено' : 'Товари не знайдено'}
+              </h3>
+              <p className="text-gray-500 mb-6 max-w-md mx-auto">
+                {hasFilters
+                  ? 'Спробуйте змінити параметри пошуку або скинути фільтри'
+                  : 'Схоже, що наразі немає товарів. Перевірте, чи працює бекенд.'}
+              </p>
+              {hasFilters && (
+                <Link
+                  href="/"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-xl font-medium hover:bg-teal-700 transition-colors"
+                >
+                  Скинути фільтри
+                </Link>
+              )}
+            </div>
+          ) : (
+            <Suspense fallback={<ProductsSkeleton />}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {products.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            </Suspense>
+          )}
+
+          {/* Load More Button */}
+          {products.length > 0 && products.length >= 8 && !hasFilters && (
+            <div className="text-center mt-12">
+              <button className="inline-flex items-center gap-2 px-8 py-4 bg-white text-gray-900 rounded-xl font-semibold border-2 border-gray-200 hover:border-teal-500 hover:text-teal-600 transition-all duration-200">
+                Завантажити ще
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Why Choose Us Section */}
+      {showHero && (
+        <section className="py-12 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+                Чому обирають нас
+              </h2>
+              <p className="text-gray-500 max-w-2xl mx-auto">
+                Ми пропонуємо найкращий сервіс та якісні товари за доступними цінами
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="text-center p-6 rounded-2xl bg-gray-50 hover:bg-teal-50 transition-colors group">
+                <div className="w-16 h-16 bg-teal-100 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:bg-teal-200 transition-colors">
+                  <span className="text-3xl">🏆</span>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Перевірена якість
+                </h3>
+                <p className="text-gray-500 text-sm">
+                  Всі товари проходять ретельну перевірку перед відправкою
+                </p>
+              </div>
+              <div className="text-center p-6 rounded-2xl bg-gray-50 hover:bg-teal-50 transition-colors group">
+                <div className="w-16 h-16 bg-teal-100 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:bg-teal-200 transition-colors">
+                  <span className="text-3xl">💎</span>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Найкращі ціни
+                </h3>
+                <p className="text-gray-500 text-sm">
+                  Гарантуємо конкурентні ціни на всі товари в каталозі
+                </p>
+              </div>
+              <div className="text-center p-6 rounded-2xl bg-gray-50 hover:bg-teal-50 transition-colors group">
+                <div className="w-16 h-16 bg-teal-100 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:bg-teal-200 transition-colors">
+                  <span className="text-3xl">🤝</span>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Підтримка 24/7
+                </h3>
+                <p className="text-gray-500 text-sm">
+                  Наша команда завжди готова допомогти вам з будь-яким питанням
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
     </main>
   );
 }

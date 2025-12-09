@@ -7,19 +7,30 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
+	"core/internal/alerts"
+	"core/internal/analytics"
+	"core/internal/auth"
 	"core/internal/cache"
+	"core/internal/email"
+	"core/internal/erp"
 	"core/internal/health"
+	"core/internal/i18n"
 	"core/internal/logger"
+	"core/internal/loyalty"
+	"core/internal/marketplace"
 	"core/internal/metrics"
 	"core/internal/pim"
 	"core/internal/ratelimit"
 	"core/internal/search"
+	"core/internal/sms"
+	"core/internal/storage"
 	"core/internal/tracing"
 	transport "core/internal/transport/http"
+	"core/internal/warehouse"
+	"core/internal/webhooks"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -130,7 +141,238 @@ func main() {
 	healthChecker.Register("redis", health.RedisCacheChecker(redisCache))
 	healthChecker.Register("elasticsearch", health.ElasticsearchChecker(searchClient))
 
-	handler := transport.NewHandler(service)
+	// Create Router with all handlers
+	router := transport.NewRouter(service)
+	extHandlers := router.GetExtendedHandlers()
+
+	// Initialize Auth service (optional)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret != "" {
+		jwtConfig := &auth.Config{
+			SecretKey:            jwtSecret,
+			AccessTokenDuration:  15 * time.Minute,
+			RefreshTokenDuration: 7 * 24 * time.Hour,
+			Issuer:               "shop-core",
+		}
+		jwtManager := auth.NewJWTManager(jwtConfig)
+		oauthManager := auth.NewOAuthManager()
+
+		// Configure Google OAuth if available
+		googleClientID := os.Getenv("GOOGLE_OAUTH_CLIENT_ID")
+		googleClientSecret := os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET")
+		if googleClientID != "" && googleClientSecret != "" {
+			googleOAuth := auth.NewGoogleOAuth(&auth.OAuthConfig{
+				ClientID:     googleClientID,
+				ClientSecret: googleClientSecret,
+				RedirectURL:  os.Getenv("GOOGLE_OAUTH_REDIRECT_URL"),
+			})
+			oauthManager.RegisterProvider(auth.ProviderGoogle, googleOAuth)
+			log.Info().Msg("Google OAuth configured")
+		}
+
+		// Configure Facebook OAuth if available
+		fbClientID := os.Getenv("FACEBOOK_OAUTH_CLIENT_ID")
+		fbClientSecret := os.Getenv("FACEBOOK_OAUTH_CLIENT_SECRET")
+		if fbClientID != "" && fbClientSecret != "" {
+			fbOAuth := auth.NewFacebookOAuth(&auth.OAuthConfig{
+				ClientID:     fbClientID,
+				ClientSecret: fbClientSecret,
+				RedirectURL:  os.Getenv("FACEBOOK_OAUTH_REDIRECT_URL"),
+			})
+			oauthManager.RegisterProvider(auth.ProviderFacebook, fbOAuth)
+			log.Info().Msg("Facebook OAuth configured")
+		}
+
+		// Auth service needs repositories - create a simple in-memory implementation for now
+		// In production, these would be backed by the database
+		authService := auth.NewService(nil, nil, jwtManager, oauthManager)
+		extHandlers.SetAuthService(authService)
+		log.Info().Msg("Auth service initialized")
+	}
+
+	// Initialize Loyalty service (optional)
+	loyaltyService := loyalty.NewService(nil) // Uses nil repo for now
+	extHandlers.SetLoyaltyService(loyaltyService)
+
+	// Initialize Email service (optional)
+	emailService := email.NewEmailService()
+
+	// Configure SendPulse if available
+	sendpulseClientID := os.Getenv("SENDPULSE_CLIENT_ID")
+	sendpulseClientSecret := os.Getenv("SENDPULSE_CLIENT_SECRET")
+	if sendpulseClientID != "" && sendpulseClientSecret != "" {
+		sendpulseClient := email.NewSendPulseClient(sendpulseClientID, sendpulseClientSecret)
+		emailService.RegisterProvider(sendpulseClient)
+		emailService.SetDefaultProvider("sendpulse")
+		log.Info().Msg("SendPulse email provider configured")
+	}
+
+	// Configure Mailchimp if available
+	mailchimpAPIKey := os.Getenv("MAILCHIMP_API_KEY")
+	if mailchimpAPIKey != "" {
+		mailchimpClient := email.NewMailchimpClient(mailchimpAPIKey)
+		emailService.RegisterProvider(mailchimpClient)
+		log.Info().Msg("Mailchimp email provider configured")
+	}
+
+	// Configure eSputnik if available
+	esputnikAPIKey := os.Getenv("ESPUTNIK_API_KEY")
+	if esputnikAPIKey != "" {
+		esputnikClient := email.NewESputnikClient(esputnikAPIKey)
+		emailService.RegisterProvider(esputnikClient)
+		log.Info().Msg("eSputnik email provider configured")
+	}
+
+	extHandlers.SetEmailService(emailService)
+
+	// Initialize SMS service (optional)
+	smsService := sms.NewSMSService()
+
+	// Configure TurboSMS if available
+	turboSMSAPIKey := os.Getenv("TURBOSMS_API_KEY")
+	turboSMSSender := os.Getenv("TURBOSMS_SENDER")
+	if turboSMSAPIKey != "" {
+		turboSMSClient := sms.NewTurboSMSClient(turboSMSAPIKey, turboSMSSender)
+		smsService.RegisterProvider(turboSMSClient)
+		smsService.SetDefaultProvider("turbosms")
+		log.Info().Msg("TurboSMS provider configured")
+	}
+
+	// Configure AlphaSMS if available
+	alphaSMSLogin := os.Getenv("ALPHASMS_LOGIN")
+	alphaSMSAPIKey := os.Getenv("ALPHASMS_API_KEY")
+	alphaSMSSender := os.Getenv("ALPHASMS_SENDER")
+	if alphaSMSLogin != "" && alphaSMSAPIKey != "" {
+		alphaSMSClient := sms.NewAlphaSMSClient(alphaSMSLogin, alphaSMSAPIKey, alphaSMSSender)
+		smsService.RegisterProvider(alphaSMSClient)
+		log.Info().Msg("AlphaSMS provider configured")
+	}
+
+	// Configure SMS.ua if available
+	smsUAAPIKey := os.Getenv("SMSUA_API_KEY")
+	smsUASender := os.Getenv("SMSUA_SENDER")
+	if smsUAAPIKey != "" {
+		smsUAClient := sms.NewSMSUAClient(smsUAAPIKey, smsUASender)
+		smsService.RegisterProvider(smsUAClient)
+		log.Info().Msg("SMS.ua provider configured")
+	}
+
+	extHandlers.SetSMSService(smsService)
+
+	// Initialize Warehouse service (optional)
+	warehouseService := warehouse.NewWarehouseService(nil) // Uses nil repo for now
+	extHandlers.SetWarehouseService(warehouseService)
+
+	// Initialize ERP service (optional)
+	erpService := erp.NewERPService()
+
+	// Configure 1C if available
+	oneCBaseURL := os.Getenv("ONEC_BASE_URL")
+	oneCUsername := os.Getenv("ONEC_USERNAME")
+	oneCPassword := os.Getenv("ONEC_PASSWORD")
+	if oneCBaseURL != "" && oneCUsername != "" {
+		oneCClient := erp.NewOneCClient(erp.OneCConfig{
+			BaseURL:  oneCBaseURL,
+			Username: oneCUsername,
+			Password: oneCPassword,
+		})
+		erpService.RegisterProvider(oneCClient)
+		erpService.SetDefaultProvider("1c")
+		log.Info().Msg("1C ERP provider configured")
+	}
+
+	// Configure BAS if available
+	basBaseURL := os.Getenv("BAS_BASE_URL")
+	basUsername := os.Getenv("BAS_USERNAME")
+	basPassword := os.Getenv("BAS_PASSWORD")
+	if basBaseURL != "" && basUsername != "" {
+		basClient := erp.NewBASClient(erp.BASConfig{
+			BaseURL:  basBaseURL,
+			Username: basUsername,
+			Password: basPassword,
+		})
+		erpService.RegisterProvider(basClient)
+		log.Info().Msg("BAS ERP provider configured")
+	}
+
+	// Configure Dilovod if available
+	dilovodAPIKey := os.Getenv("DILOVOD_API_KEY")
+	dilovodCompanyID := os.Getenv("DILOVOD_COMPANY_ID")
+	if dilovodAPIKey != "" && dilovodCompanyID != "" {
+		dilovodClient := erp.NewDilovodClient(dilovodAPIKey, dilovodCompanyID)
+		erpService.RegisterProvider(dilovodClient)
+		log.Info().Msg("Dilovod ERP provider configured")
+	}
+
+	extHandlers.SetERPService(erpService)
+
+	// Initialize Webhook service (optional)
+	webhookWorkers := 5
+	if workersStr := os.Getenv("WEBHOOK_WORKERS"); workersStr != "" {
+		if workers, err := strconv.Atoi(workersStr); err == nil {
+			webhookWorkers = workers
+		}
+	}
+	webhookService := webhooks.NewWebhookService(nil, webhookWorkers) // Uses nil repo for now
+	extHandlers.SetWebhookService(webhookService)
+
+	// Initialize Analytics service (optional)
+	analyticsService := analytics.NewAnalyticsService(nil) // Uses nil repo for now
+	extHandlers.SetAnalyticsService(analyticsService)
+
+	// Initialize S3/MinIO Storage (optional)
+	s3Endpoint := os.Getenv("S3_ENDPOINT")
+	s3AccessKey := os.Getenv("S3_ACCESS_KEY")
+	s3SecretKey := os.Getenv("S3_SECRET_KEY")
+	if s3Endpoint != "" && s3AccessKey != "" && s3SecretKey != "" {
+		s3Config := &storage.Config{
+			Endpoint:  s3Endpoint,
+			AccessKey: s3AccessKey,
+			SecretKey: s3SecretKey,
+			Bucket:    os.Getenv("S3_BUCKET"),
+			Region:    os.Getenv("S3_REGION"),
+			UseSSL:    os.Getenv("S3_USE_SSL") == "true",
+			PublicURL: os.Getenv("S3_PUBLIC_URL"),
+		}
+		if s3Config.Bucket == "" {
+			s3Config.Bucket = "shop"
+		}
+		if s3Config.Region == "" {
+			s3Config.Region = "us-east-1"
+		}
+
+		s3Storage, err := storage.NewS3Storage(s3Config)
+		if err != nil {
+			log.Warn().Err(err).Msg("S3 storage initialization failed")
+		} else {
+			extHandlers.SetStorage(s3Storage)
+			log.Info().Str("endpoint", s3Endpoint).Msg("S3 storage initialized")
+		}
+	}
+
+	// Initialize i18n Translator
+	translator, err := i18n.New()
+	if err != nil {
+		log.Warn().Err(err).Msg("i18n translator initialization failed")
+	} else {
+		extHandlers.SetTranslator(translator)
+		log.Info().Msg("i18n translator initialized")
+	}
+
+	// Initialize Marketplace Manager (optional)
+	marketplaceManager := marketplace.NewManager(nil) // Uses nil repo for now
+	extHandlers.SetMarketplaceManager(marketplaceManager)
+
+	// Initialize Alerts Monitor (optional)
+	alertsConfig := alerts.Config{
+		LowStockThreshold: 10,
+		Enabled:           true,
+	}
+	alertPublisher := alerts.NewLogPublisher()
+	alertMonitor := alerts.NewInventoryMonitor(alertsConfig, alertPublisher)
+	extHandlers.SetAlertMonitor(alertMonitor)
+
+	log.Info().Msg("Extended handlers initialized")
 
 	// Initialize rate limiter
 	rlConfig := ratelimit.DefaultConfig()
@@ -156,7 +398,10 @@ func main() {
 		port = "8080"
 	}
 
+	// Create a mux for special routes that need dedicated handlers
 	mux := http.NewServeMux()
+
+	// Health check routes (handled by dedicated health checker)
 	mux.HandleFunc("/health", healthChecker.Handler())
 	mux.HandleFunc("/health/live", health.LivenessHandler())
 
@@ -188,203 +433,8 @@ func main() {
 </html>`))
 	})
 
-	// Product routes
-	mux.HandleFunc("/feed/rozetka", handler.GenerateFeed)
-	mux.HandleFunc("/products", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			handler.CreateProduct(w, r)
-		case http.MethodGet:
-			handler.ListProducts(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	mux.HandleFunc("/products/", func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-
-		// Handle special endpoints
-		if len(path) > len("/products/") {
-			if strings.HasSuffix(path, "/stock") {
-				handler.UpdateStock(w, r)
-				return
-			}
-			if strings.HasSuffix(path, "/image") {
-				handler.UpdateImage(w, r)
-				return
-			}
-			if strings.HasSuffix(path, "/decrement") {
-				handler.DecrementStock(w, r)
-				return
-			}
-			if strings.HasSuffix(path, "/price-history") {
-				handler.GetPriceHistory(w, r)
-				return
-			}
-			if strings.HasSuffix(path, "/latest-price-change") {
-				handler.GetLatestPriceChange(w, r)
-				return
-			}
-			if strings.HasSuffix(path, "/reviews") {
-				handler.GetProductReviews(w, r)
-				return
-			}
-			if strings.HasSuffix(path, "/rating") {
-				handler.GetProductRating(w, r)
-				return
-			}
-			if strings.HasSuffix(path, "/similar") {
-				handler.GetSimilarProducts(w, r)
-				return
-			}
-			if strings.HasSuffix(path, "/frequently-bought-together") {
-				handler.GetFrequentlyBoughtTogether(w, r)
-				return
-			}
-		}
-
-		switch r.Method {
-		case http.MethodGet:
-			handler.GetProduct(w, r)
-		case http.MethodPut:
-			handler.UpdateProduct(w, r)
-		case http.MethodDelete:
-			handler.DeleteProduct(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	// Category routes
-	mux.HandleFunc("/categories", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			handler.CreateCategory(w, r)
-		case http.MethodGet:
-			handler.ListCategories(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	mux.HandleFunc("/categories/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handler.GetCategory(w, r)
-		case http.MethodDelete:
-			handler.DeleteCategory(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	// Cart routes
-	mux.HandleFunc("/cart/", func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		// Check if it's /cart/{user_id}/item/{product_id}
-		if strings.Contains(path, "/item/") {
-			switch r.Method {
-			case http.MethodDelete:
-				handler.RemoveFromCart(w, r)
-			case http.MethodPatch:
-				handler.UpdateCartItemQuantity(w, r)
-			default:
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-			return
-		}
-		// /cart/{user_id}
-		switch r.Method {
-		case http.MethodPost:
-			handler.AddToCart(w, r)
-		case http.MethodGet:
-			handler.GetCart(w, r)
-		case http.MethodDelete:
-			handler.ClearCart(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	// Wishlist routes
-	mux.HandleFunc("/wishlist/", func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		// Check if it's /wishlist/{user_id}/item/{product_id}/to-cart
-		if strings.Contains(path, "/to-cart") {
-			handler.MoveWishlistToCart(w, r)
-			return
-		}
-		// Check if it's /wishlist/{user_id}/item/{product_id}
-		if strings.Contains(path, "/item/") {
-			switch r.Method {
-			case http.MethodGet:
-				handler.IsInWishlist(w, r)
-			case http.MethodDelete:
-				handler.RemoveFromWishlist(w, r)
-			default:
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-			return
-		}
-		// /wishlist/{user_id}
-		switch r.Method {
-		case http.MethodPost:
-			handler.AddToWishlist(w, r)
-		case http.MethodGet:
-			handler.GetWishlist(w, r)
-		case http.MethodDelete:
-			handler.ClearWishlist(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	// Review routes
-	mux.HandleFunc("/reviews", handler.CreateReview)
-	mux.HandleFunc("/reviews/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handler.GetReview(w, r)
-		case http.MethodDelete:
-			handler.DeleteReview(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	// User routes (reviews, recommendations)
-	mux.HandleFunc("/users/", func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasSuffix(path, "/reviews") {
-			handler.GetUserReviews(w, r)
-			return
-		}
-		if strings.HasSuffix(path, "/recommendations") {
-			handler.GetPersonalizedRecommendations(w, r)
-			return
-		}
-		http.Error(w, "Not found", http.StatusNotFound)
-	})
-
-	// Popular products
-	mux.HandleFunc("/recommendations/popular", handler.GetPopularProducts)
-
-	// Inventory alerts routes
-	mux.HandleFunc("/inventory/low-stock", handler.GetLowStockProducts)
-	mux.HandleFunc("/inventory/out-of-stock", handler.GetOutOfStockProducts)
-	mux.HandleFunc("/inventory/stats", handler.GetInventoryStats)
-
-	// Analytics routes
-	mux.HandleFunc("/analytics/dashboard", handler.GetAnalyticsDashboard)
-	mux.HandleFunc("/analytics/top-products", handler.GetTopSellingProducts)
-	mux.HandleFunc("/analytics/daily-sales", handler.GetDailySalesReport)
-	mux.HandleFunc("/analytics/by-category", handler.GetSalesByCategory)
-
-	// Search routes
-	mux.HandleFunc("/search", handler.SearchProducts)
-	mux.HandleFunc("/search/suggest", handler.SearchSuggest)
-	mux.HandleFunc("/search/reindex", handler.ReindexProducts)
+	// All API routes handled by the Router
+	mux.Handle("/", router)
 
 	// Wrap with middleware chain: rate limit -> tracing -> metrics -> logging -> handler
 	var wrappedMux http.Handler = mux

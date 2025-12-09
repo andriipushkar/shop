@@ -1,0 +1,532 @@
+# GraphQL Schema for E-commerce API
+
+scalar DateTime
+scalar JSON
+
+# Enums
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum SortOrder {
+  ASC
+  DESC
+}
+
+# Input Types
+input PaginationInput {
+  page: Int = 1
+  limit: Int = 20
+}
+
+input ProductFilterInput {
+  categoryId: ID
+  categorySlug: String
+  brandId: ID
+  minPrice: Float
+  maxPrice: Float
+  inStock: Boolean
+  isActive: Boolean
+  search: String
+  attributes: JSON
+}
+
+input ProductSortInput {
+  field: ProductSortField!
+  order: SortOrder!
+}
+
+enum ProductSortField {
+  NAME
+  PRICE
+  CREATED_AT
+  POPULARITY
+  RATING
+}
+
+input OrderFilterInput {
+  status: OrderStatus
+  paymentStatus: PaymentStatus
+  customerId: ID
+  dateFrom: DateTime
+  dateTo: DateTime
+  search: String
+}
+
+input CustomerFilterInput {
+  search: String
+  hasOrders: Boolean
+  registeredFrom: DateTime
+  registeredTo: DateTime
+}
+
+input CreateProductInput {
+  sku: String!
+  name: String!
+  slug: String
+  description: String
+  categoryId: ID!
+  brandId: ID
+  price: Float!
+  compareAtPrice: Float
+  costPrice: Float
+  stock: Int
+  weight: Float
+  attributes: JSON
+  images: [String!]
+  isActive: Boolean
+}
+
+input UpdateProductInput {
+  sku: String
+  name: String
+  slug: String
+  description: String
+  categoryId: ID
+  brandId: ID
+  price: Float
+  compareAtPrice: Float
+  costPrice: Float
+  stock: Int
+  weight: Float
+  attributes: JSON
+  images: [String!]
+  isActive: Boolean
+}
+
+input CreateOrderInput {
+  customerId: ID
+  customer: CustomerInput
+  items: [OrderItemInput!]!
+  shippingMethod: String!
+  shippingAddress: AddressInput!
+  paymentMethod: String
+  notes: String
+  promoCode: String
+}
+
+input OrderItemInput {
+  productId: ID!
+  quantity: Int!
+  price: Float
+}
+
+input CustomerInput {
+  name: String!
+  email: String
+  phone: String!
+}
+
+input AddressInput {
+  city: String!
+  street: String
+  building: String
+  apartment: String
+  postalCode: String
+  novaPoshta: NovaPoshtaInput
+}
+
+input NovaPoshtaInput {
+  warehouseRef: String
+  warehouseNumber: String
+  cityRef: String
+}
+
+input UpdateOrderStatusInput {
+  orderId: ID!
+  status: OrderStatus!
+  trackingNumber: String
+  notes: String
+}
+
+input CreateCategoryInput {
+  name: String!
+  slug: String
+  parentId: ID
+  description: String
+  image: String
+  position: Int
+  isActive: Boolean
+}
+
+input UpdateCategoryInput {
+  name: String
+  slug: String
+  parentId: ID
+  description: String
+  image: String
+  position: Int
+  isActive: Boolean
+}
+
+# Types
+type Query {
+  # Products
+  product(id: ID, slug: String, sku: String): Product
+  products(
+    filter: ProductFilterInput
+    sort: ProductSortInput
+    pagination: PaginationInput
+  ): ProductConnection!
+
+  # Categories
+  category(id: ID, slug: String): Category
+  categories(parentId: ID): [Category!]!
+  categoryTree: [Category!]!
+
+  # Orders
+  order(id: ID, number: String): Order
+  orders(
+    filter: OrderFilterInput
+    pagination: PaginationInput
+  ): OrderConnection!
+
+  # Customers
+  customer(id: ID, email: String, phone: String): Customer
+  customers(
+    filter: CustomerFilterInput
+    pagination: PaginationInput
+  ): CustomerConnection!
+
+  # Cart
+  cart(cartId: ID!): Cart
+
+  # Analytics
+  dashboardStats(period: String): DashboardStats
+  topProducts(limit: Int, days: Int): [ProductStats!]!
+  salesByCategory(days: Int): [CategoryStats!]!
+
+  # Search
+  search(query: String!, limit: Int): SearchResult!
+
+  # Inventory
+  productStock(productId: ID!): [WarehouseStock!]!
+  lowStockProducts(warehouseId: ID, limit: Int): [WarehouseStock!]!
+
+  # Warehouses
+  warehouse(id: ID!): Warehouse
+  warehouses: [Warehouse!]!
+}
+
+type Mutation {
+  # Products
+  createProduct(input: CreateProductInput!): Product!
+  updateProduct(id: ID!, input: UpdateProductInput!): Product!
+  deleteProduct(id: ID!): Boolean!
+  updateProductStock(productId: ID!, warehouseId: ID, quantity: Int!): Product!
+
+  # Categories
+  createCategory(input: CreateCategoryInput!): Category!
+  updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
+  deleteCategory(id: ID!): Boolean!
+
+  # Orders
+  createOrder(input: CreateOrderInput!): Order!
+  updateOrderStatus(input: UpdateOrderStatusInput!): Order!
+  cancelOrder(orderId: ID!, reason: String): Order!
+
+  # Cart
+  addToCart(cartId: ID, productId: ID!, quantity: Int!): Cart!
+  updateCartItem(cartId: ID!, productId: ID!, quantity: Int!): Cart!
+  removeFromCart(cartId: ID!, productId: ID!): Cart!
+  clearCart(cartId: ID!): Cart!
+  applyPromoCode(cartId: ID!, code: String!): Cart!
+
+  # Customers
+  createCustomer(input: CustomerInput!): Customer!
+  updateCustomer(id: ID!, input: CustomerInput!): Customer!
+
+  # Inventory
+  transferStock(
+    fromWarehouseId: ID!
+    toWarehouseId: ID!
+    productId: ID!
+    quantity: Int!
+  ): Boolean!
+
+  adjustStock(
+    warehouseId: ID!
+    productId: ID!
+    quantity: Int!
+    reason: String
+  ): Boolean!
+}
+
+type Subscription {
+  orderCreated: Order!
+  orderStatusChanged(orderId: ID): Order!
+  productStockChanged(productId: ID): Product!
+  lowStockAlert: WarehouseStock!
+}
+
+# Object Types
+type Product {
+  id: ID!
+  sku: String!
+  name: String!
+  slug: String!
+  description: String
+  category: Category
+  brand: Brand
+  price: Float!
+  compareAtPrice: Float
+  costPrice: Float
+  currency: String!
+  stock: Int!
+  reserved: Int!
+  available: Int!
+  weight: Float
+  attributes: JSON
+  images: [ProductImage!]!
+  variants: [ProductVariant!]
+  relatedProducts: [Product!]
+  reviews: [Review!]
+  averageRating: Float
+  reviewCount: Int
+  isActive: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ProductImage {
+  url: String!
+  alt: String
+  position: Int!
+}
+
+type ProductVariant {
+  id: ID!
+  sku: String!
+  name: String!
+  price: Float!
+  stock: Int!
+  attributes: JSON
+}
+
+type ProductConnection {
+  items: [Product!]!
+  total: Int!
+  page: Int!
+  limit: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+}
+
+type Category {
+  id: ID!
+  name: String!
+  slug: String!
+  description: String
+  image: String
+  parent: Category
+  children: [Category!]!
+  products(pagination: PaginationInput): ProductConnection!
+  productCount: Int!
+  position: Int!
+  isActive: Boolean!
+  breadcrumbs: [CategoryBreadcrumb!]!
+}
+
+type CategoryBreadcrumb {
+  id: ID!
+  name: String!
+  slug: String!
+}
+
+type Brand {
+  id: ID!
+  name: String!
+  slug: String!
+  logo: String
+  description: String
+  products(pagination: PaginationInput): ProductConnection!
+}
+
+type Order {
+  id: ID!
+  number: String!
+  status: OrderStatus!
+  paymentStatus: PaymentStatus!
+  customer: Customer
+  items: [OrderItem!]!
+  subtotal: Float!
+  discount: Float!
+  shippingCost: Float!
+  total: Float!
+  currency: String!
+  shippingMethod: String!
+  shippingAddress: Address!
+  paymentMethod: String
+  trackingNumber: String
+  notes: String
+  promoCode: PromoCode
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  paidAt: DateTime
+  shippedAt: DateTime
+  deliveredAt: DateTime
+}
+
+type OrderItem {
+  id: ID!
+  product: Product
+  productId: ID!
+  sku: String!
+  name: String!
+  quantity: Int!
+  price: Float!
+  total: Float!
+}
+
+type OrderConnection {
+  items: [Order!]!
+  total: Int!
+  page: Int!
+  limit: Int!
+  totalPages: Int!
+}
+
+type Customer {
+  id: ID!
+  name: String!
+  email: String
+  phone: String!
+  orders: [Order!]!
+  orderCount: Int!
+  totalSpent: Float!
+  averageOrderValue: Float!
+  addresses: [Address!]
+  notes: String
+  createdAt: DateTime!
+  lastOrderAt: DateTime
+}
+
+type CustomerConnection {
+  items: [Customer!]!
+  total: Int!
+  page: Int!
+  limit: Int!
+}
+
+type Address {
+  city: String!
+  street: String
+  building: String
+  apartment: String
+  postalCode: String
+  country: String
+  fullAddress: String!
+}
+
+type Cart {
+  id: ID!
+  items: [CartItem!]!
+  subtotal: Float!
+  discount: Float!
+  shippingCost: Float
+  total: Float!
+  itemCount: Int!
+  promoCode: PromoCode
+  expiresAt: DateTime
+}
+
+type CartItem {
+  product: Product!
+  quantity: Int!
+  price: Float!
+  total: Float!
+}
+
+type PromoCode {
+  code: String!
+  discountType: String!
+  discountValue: Float!
+  appliedDiscount: Float
+}
+
+type Review {
+  id: ID!
+  customer: Customer
+  rating: Int!
+  title: String
+  text: String
+  pros: String
+  cons: String
+  images: [String!]
+  isVerified: Boolean!
+  createdAt: DateTime!
+}
+
+type Warehouse {
+  id: ID!
+  code: String!
+  name: String!
+  type: String!
+  address: Address
+  isActive: Boolean!
+  isDefault: Boolean!
+}
+
+type WarehouseStock {
+  warehouse: Warehouse!
+  product: Product!
+  quantity: Int!
+  reserved: Int!
+  available: Int!
+  minStock: Int
+  location: String
+}
+
+type DashboardStats {
+  totalRevenue: Float!
+  totalOrders: Int!
+  totalCustomers: Int!
+  averageOrderValue: Float!
+  revenueChange: Float
+  ordersChange: Float
+  topProducts: [ProductStats!]!
+  recentOrders: [Order!]!
+  salesByDay: [DailySales!]!
+}
+
+type ProductStats {
+  product: Product!
+  revenue: Float!
+  quantity: Int!
+  orderCount: Int!
+}
+
+type CategoryStats {
+  category: Category!
+  revenue: Float!
+  orderCount: Int!
+  productCount: Int!
+}
+
+type DailySales {
+  date: String!
+  revenue: Float!
+  orders: Int!
+}
+
+type SearchResult {
+  products: [Product!]!
+  categories: [Category!]!
+  brands: [Brand!]!
+  totalProducts: Int!
+}

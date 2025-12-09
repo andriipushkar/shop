@@ -1,0 +1,1810 @@
+openapi: 3.0.3
+info:
+  title: E-Commerce API
+  description: |
+    REST API для української e-commerce платформи.
+
+    ## Автентифікація
+    API використовує Bearer token автентифікацію. Додайте header:
+    ```
+    Authorization: Bearer <your-token>
+    ```
+
+    ## Рейт-ліміти
+    - 100 запитів/хвилину для автентифікованих користувачів
+    - 30 запитів/хвилину для неавтентифікованих
+
+    ## Формат відповідей
+    Всі відповіді повертаються в JSON форматі.
+
+    ## Пагінація
+    Використовуйте параметри `page` та `limit` для пагінації.
+    Максимальний limit: 100.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: api@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.example.com/v1
+    description: Production
+  - url: https://staging-api.example.com/v1
+    description: Staging
+  - url: http://localhost:8080/api/v1
+    description: Development
+
+tags:
+  - name: Products
+    description: Управління товарами
+  - name: Categories
+    description: Управління категоріями
+  - name: Orders
+    description: Управління замовленнями
+  - name: Customers
+    description: Управління клієнтами
+  - name: Cart
+    description: Кошик покупок
+  - name: Inventory
+    description: Управління залишками
+  - name: Analytics
+    description: Аналітика та звіти
+  - name: Webhooks
+    description: Вебхуки
+
+paths:
+  /products:
+    get:
+      tags:
+        - Products
+      summary: Список товарів
+      description: Повертає список товарів з можливістю фільтрації та пагінації
+      operationId: listProducts
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: category_id
+          in: query
+          description: Фільтр по категорії
+          schema:
+            type: string
+        - name: min_price
+          in: query
+          description: Мінімальна ціна
+          schema:
+            type: number
+        - name: max_price
+          in: query
+          description: Максимальна ціна
+          schema:
+            type: number
+        - name: in_stock
+          in: query
+          description: Тільки товари в наявності
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          description: Пошуковий запит
+          schema:
+            type: string
+        - name: sort
+          in: query
+          description: Сортування
+          schema:
+            type: string
+            enum: [name, -name, price, -price, created_at, -created_at]
+      responses:
+        '200':
+          description: Успішна відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags:
+        - Products
+      summary: Створити товар
+      operationId: createProduct
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Товар створено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /products/{id}:
+    get:
+      tags:
+        - Products
+      summary: Отримати товар
+      operationId: getProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID товару
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Успішна відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Products
+      summary: Оновити товар
+      operationId: updateProduct
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Товар оновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Products
+      summary: Видалити товар
+      operationId: deleteProduct
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Товар видалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders:
+    get:
+      tags:
+        - Orders
+      summary: Список замовлень
+      operationId: listOrders
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/OrderStatus'
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Успішна відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+
+    post:
+      tags:
+        - Orders
+      summary: Створити замовлення
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Замовлення створено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /orders/{id}:
+    get:
+      tags:
+        - Orders
+      summary: Отримати замовлення
+      operationId: getOrder
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Успішна відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders/{id}/status:
+    patch:
+      tags:
+        - Orders
+      summary: Оновити статус замовлення
+      operationId: updateOrderStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  $ref: '#/components/schemas/OrderStatus'
+                tracking_number:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Статус оновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /cart:
+    get:
+      tags:
+        - Cart
+      summary: Отримати кошик
+      operationId: getCart
+      parameters:
+        - name: cart_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Успішна відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+
+  /cart/items:
+    post:
+      tags:
+        - Cart
+      summary: Додати товар до кошика
+      operationId: addToCart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - product_id
+                - quantity
+              properties:
+                cart_id:
+                  type: string
+                product_id:
+                  type: string
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Товар додано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+
+  /analytics/dashboard:
+    get:
+      tags:
+        - Analytics
+      summary: Dashboard статистика
+      operationId: getDashboard
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [today, yesterday, week, month, year]
+            default: month
+      responses:
+        '200':
+          description: Успішна відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStats'
+
+  /analytics/abc-xyz:
+    get:
+      tags:
+        - Analytics
+      summary: ABC-XYZ аналіз
+      operationId: getAbcXyzAnalysis
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [month, quarter, year]
+            default: quarter
+      responses:
+        '200':
+          description: Успішна відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AbcXyzAnalysis'
+
+  /analytics/rfm:
+    get:
+      tags:
+        - Analytics
+      summary: RFM аналіз клієнтів
+      operationId: getRfmAnalysis
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Успішна відповідь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RfmAnalysis'
+
+  /webhooks:
+    get:
+      tags:
+        - Webhooks
+      summary: Список вебхуків
+      operationId: listWebhooks
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Успішна відповідь
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Webhook'
+
+    post:
+      tags:
+        - Webhooks
+      summary: Створити вебхук
+      operationId: createWebhook
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookRequest'
+      responses:
+        '201':
+          description: Вебхук створено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+
+  # Wishlist endpoints
+  /wishlist/{user_id}:
+    get:
+      tags:
+        - Wishlist
+      summary: Отримати список бажань
+      operationId: getWishlist
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Список бажань
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WishlistItem'
+    post:
+      tags:
+        - Wishlist
+      summary: Додати в список бажань
+      operationId: addToWishlist
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - product_id
+              properties:
+                product_id:
+                  type: string
+      responses:
+        '201':
+          description: Додано в список бажань
+    delete:
+      tags:
+        - Wishlist
+      summary: Очистити список бажань
+      operationId: clearWishlist
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Список очищено
+
+  /wishlist/{user_id}/item/{product_id}:
+    get:
+      tags:
+        - Wishlist
+      summary: Перевірити наявність товару в списку
+      operationId: isInWishlist
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Статус
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  in_wishlist:
+                    type: boolean
+    delete:
+      tags:
+        - Wishlist
+      summary: Видалити зі списку бажань
+      operationId: removeFromWishlist
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Видалено
+
+  /wishlist/{user_id}/item/{product_id}/to-cart:
+    post:
+      tags:
+        - Wishlist
+      summary: Перемістити в кошик
+      operationId: moveWishlistToCart
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Переміщено в кошик
+
+  # Reviews endpoints
+  /reviews:
+    post:
+      tags:
+        - Reviews
+      summary: Створити відгук
+      operationId: createReview
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewRequest'
+      responses:
+        '201':
+          description: Відгук створено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /reviews/{id}:
+    get:
+      tags:
+        - Reviews
+      summary: Отримати відгук
+      operationId: getReview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Відгук
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Reviews
+      summary: Видалити відгук
+      operationId: deleteReview
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Відгук видалено
+
+  /products/{id}/reviews:
+    get:
+      tags:
+        - Reviews
+      summary: Відгуки на товар
+      operationId: getProductReviews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список відгуків
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+
+  /products/{id}/rating:
+    get:
+      tags:
+        - Reviews
+      summary: Рейтинг товару
+      operationId: getProductRating
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Рейтинг
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductRating'
+
+  /products/{id}/price-history:
+    get:
+      tags:
+        - Products
+      summary: Історія цін товару
+      operationId: getPriceHistory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Історія цін
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PriceHistory'
+
+  /users/{user_id}/reviews:
+    get:
+      tags:
+        - Reviews
+      summary: Відгуки користувача
+      operationId: getUserReviews
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Список відгуків
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+
+  # Search endpoints
+  /search:
+    get:
+      tags:
+        - Search
+      summary: Пошук товарів
+      operationId: searchProducts
+      parameters:
+        - name: q
+          in: query
+          description: Пошуковий запит
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          schema:
+            type: string
+        - name: min_price
+          in: query
+          schema:
+            type: number
+        - name: max_price
+          in: query
+          schema:
+            type: number
+        - name: in_stock
+          in: query
+          schema:
+            type: boolean
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [price_asc, price_desc, name, newest]
+        - $ref: '#/components/parameters/PageParam'
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Результати пошуку
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResult'
+
+  /search/suggest:
+    get:
+      tags:
+        - Search
+      summary: Автодоповнення пошуку
+      operationId: searchSuggest
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Підказки
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      type: string
+
+  /search/reindex:
+    post:
+      tags:
+        - Search
+      summary: Переіндексація товарів
+      operationId: reindexProducts
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Переіндексацію запущено
+
+  # Recommendations endpoints
+  /products/{id}/similar:
+    get:
+      tags:
+        - Recommendations
+      summary: Схожі товари
+      operationId: getSimilarProducts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Схожі товари
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+
+  /products/{id}/frequently-bought-together:
+    get:
+      tags:
+        - Recommendations
+      summary: Часто купують разом
+      operationId: getFrequentlyBoughtTogether
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Товари
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+
+  /recommendations/popular:
+    get:
+      tags:
+        - Recommendations
+      summary: Популярні товари
+      operationId: getPopularProducts
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Популярні товари
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+
+  /users/{user_id}/recommendations:
+    get:
+      tags:
+        - Recommendations
+      summary: Персоналізовані рекомендації
+      operationId: getPersonalizedRecommendations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Рекомендації
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+
+  # Inventory endpoints
+  /inventory/low-stock:
+    get:
+      tags:
+        - Inventory
+      summary: Товари з низьким залишком
+      operationId: getLowStockProducts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: threshold
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Товари з низьким залишком
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LowStockProduct'
+
+  /inventory/out-of-stock:
+    get:
+      tags:
+        - Inventory
+      summary: Товари без залишку
+      operationId: getOutOfStockProducts
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Товари без залишку
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+
+  /inventory/stats:
+    get:
+      tags:
+        - Inventory
+      summary: Статистика запасів
+      operationId: getInventoryStats
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Статистика
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryStats'
+
+  /export/{entity}:
+    get:
+      tags:
+        - Analytics
+      summary: Експорт даних
+      operationId: exportData
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: entity
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [products, orders, customers, inventory]
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv, xlsx, json]
+            default: xlsx
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Файл експорту
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+                format: binary
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Номер сторінки
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    LimitParam:
+      name: limit
+      in: query
+      description: Кількість елементів на сторінці
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    BadRequest:
+      description: Невірний запит
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Не авторизовано
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Не знайдено
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Помилка валідації
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+    InternalError:
+      description: Внутрішня помилка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        sku:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category'
+        price:
+          type: number
+        compare_at_price:
+          type: number
+        currency:
+          type: string
+          default: UAH
+        stock:
+          type: integer
+        available:
+          type: integer
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+        attributes:
+          type: object
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProductImage:
+      type: object
+      properties:
+        url:
+          type: string
+        alt:
+          type: string
+        position:
+          type: integer
+
+    CreateProductRequest:
+      type: object
+      required:
+        - sku
+        - name
+        - category_id
+        - price
+      properties:
+        sku:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+        price:
+          type: number
+        compare_at_price:
+          type: number
+        stock:
+          type: integer
+        images:
+          type: array
+          items:
+            type: string
+        attributes:
+          type: object
+        is_active:
+          type: boolean
+          default: true
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        sku:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+        price:
+          type: number
+        compare_at_price:
+          type: number
+        stock:
+          type: integer
+        images:
+          type: array
+          items:
+            type: string
+        attributes:
+          type: object
+        is_active:
+          type: boolean
+
+    ProductListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        total_pages:
+          type: integer
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        parent_id:
+          type: string
+        image:
+          type: string
+        product_count:
+          type: integer
+        is_active:
+          type: boolean
+
+    OrderStatus:
+      type: string
+      enum:
+        - new
+        - confirmed
+        - processing
+        - shipped
+        - delivered
+        - cancelled
+        - refunded
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        number:
+          type: string
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        payment_status:
+          type: string
+          enum: [pending, paid, failed, refunded]
+        customer:
+          $ref: '#/components/schemas/Customer'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        subtotal:
+          type: number
+        discount:
+          type: number
+        shipping_cost:
+          type: number
+        total:
+          type: number
+        currency:
+          type: string
+        shipping_method:
+          type: string
+        shipping_address:
+          $ref: '#/components/schemas/Address'
+        tracking_number:
+          type: string
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OrderItem:
+      type: object
+      properties:
+        product_id:
+          type: string
+        sku:
+          type: string
+        name:
+          type: string
+        quantity:
+          type: integer
+        price:
+          type: number
+        total:
+          type: number
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - items
+        - shipping_method
+        - shipping_address
+      properties:
+        customer_id:
+          type: string
+        customer:
+          $ref: '#/components/schemas/CustomerInput'
+        items:
+          type: array
+          items:
+            type: object
+            required:
+              - product_id
+              - quantity
+            properties:
+              product_id:
+                type: string
+              quantity:
+                type: integer
+        shipping_method:
+          type: string
+        shipping_address:
+          $ref: '#/components/schemas/Address'
+        payment_method:
+          type: string
+        notes:
+          type: string
+        promo_code:
+          type: string
+
+    OrderListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        order_count:
+          type: integer
+        total_spent:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+
+    CustomerInput:
+      type: object
+      required:
+        - name
+        - phone
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+
+    Address:
+      type: object
+      required:
+        - city
+      properties:
+        city:
+          type: string
+        street:
+          type: string
+        building:
+          type: string
+        apartment:
+          type: string
+        postal_code:
+          type: string
+        nova_poshta:
+          type: object
+          properties:
+            warehouse_ref:
+              type: string
+            warehouse_number:
+              type: string
+
+    Cart:
+      type: object
+      properties:
+        id:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+        subtotal:
+          type: number
+        discount:
+          type: number
+        total:
+          type: number
+        item_count:
+          type: integer
+        promo_code:
+          type: string
+
+    CartItem:
+      type: object
+      properties:
+        product:
+          $ref: '#/components/schemas/Product'
+        quantity:
+          type: integer
+        price:
+          type: number
+        total:
+          type: number
+
+    DashboardStats:
+      type: object
+      properties:
+        total_revenue:
+          type: number
+        total_orders:
+          type: integer
+        total_customers:
+          type: integer
+        average_order_value:
+          type: number
+        revenue_change:
+          type: number
+        orders_change:
+          type: number
+        top_products:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: string
+              name:
+                type: string
+              revenue:
+                type: number
+              quantity:
+                type: integer
+        sales_by_day:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              revenue:
+                type: number
+              orders:
+                type: integer
+
+    AbcXyzAnalysis:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+        total_products:
+          type: integer
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: string
+              sku:
+                type: string
+              name:
+                type: string
+              abc_category:
+                type: string
+                enum: [A, B, C]
+              xyz_category:
+                type: string
+                enum: [X, Y, Z]
+              combined_category:
+                type: string
+              revenue:
+                type: number
+              recommendation:
+                type: string
+
+    RfmAnalysis:
+      type: object
+      properties:
+        total_customers:
+          type: integer
+        segments:
+          type: array
+          items:
+            type: object
+            properties:
+              segment:
+                type: string
+              segment_name:
+                type: string
+              customer_count:
+                type: integer
+              revenue:
+                type: number
+              actions:
+                type: array
+                items:
+                  type: string
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CreateWebhookRequest:
+      type: object
+      required:
+        - url
+        - events
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - order.created
+              - order.paid
+              - order.shipped
+              - order.delivered
+              - order.cancelled
+              - product.created
+              - product.updated
+              - product.out_of_stock
+              - customer.created
+        secret:
+          type: string
+        is_active:
+          type: boolean
+          default: true
+
+    WishlistItem:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        product_id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        image_url:
+          type: string
+        added_at:
+          type: string
+          format: date-time
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+        product_id:
+          type: string
+        user_id:
+          type: integer
+          format: int64
+        user_name:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CreateReviewRequest:
+      type: object
+      required:
+        - product_id
+        - user_id
+        - rating
+      properties:
+        product_id:
+          type: string
+        user_id:
+          type: integer
+          format: int64
+        user_name:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+
+    ProductRating:
+      type: object
+      properties:
+        product_id:
+          type: string
+        average_rating:
+          type: number
+        review_count:
+          type: integer
+
+    PriceHistory:
+      type: object
+      properties:
+        id:
+          type: string
+        product_id:
+          type: string
+        old_price:
+          type: number
+        new_price:
+          type: number
+        changed_at:
+          type: string
+          format: date-time
+
+    SearchResult:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchProduct'
+        total:
+          type: integer
+          format: int64
+        took_ms:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+
+    SearchProduct:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+        category:
+          type: string
+        price:
+          type: number
+        stock:
+          type: integer
+        image_url:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    Recommendation:
+      type: object
+      properties:
+        product:
+          $ref: '#/components/schemas/Product'
+        reason:
+          type: string
+          enum: [similar_category, frequently_bought_together, popular]
+        score:
+          type: number
+
+    LowStockProduct:
+      type: object
+      properties:
+        product:
+          $ref: '#/components/schemas/Product'
+        stock:
+          type: integer
+        threshold:
+          type: integer
+
+    InventoryStats:
+      type: object
+      properties:
+        total_products:
+          type: integer
+        out_of_stock:
+          type: integer
+        low_stock:
+          type: integer
+        in_stock:
+          type: integer
+        total_inventory_value:
+          type: number

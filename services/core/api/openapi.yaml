@@ -31,6 +31,32 @@ tags:
     description: Sales analytics and dashboard
   - name: Health
     description: Health check endpoints
+  - name: Auth
+    description: Authentication and authorization
+  - name: Loyalty
+    description: Loyalty program and points
+  - name: Email
+    description: Email notifications
+  - name: SMS
+    description: SMS notifications
+  - name: Warehouses
+    description: Multi-warehouse management
+  - name: ERP
+    description: ERP integration (1C, BAS, Dilovod)
+  - name: Marketplace
+    description: Marketplace integrations (Rozetka, Prom, OLX)
+  - name: Webhooks
+    description: Webhook management
+  - name: Export
+    description: Data export (CSV, Excel)
+  - name: Storage
+    description: File storage (S3/MinIO)
+  - name: i18n
+    description: Internationalization
+  - name: Logistics
+    description: Logistics providers (Nova Poshta, Ukrposhta)
+  - name: Alerts
+    description: Inventory alerts
 
 paths:
   /health:
@@ -861,6 +887,615 @@ paths:
                 items:
                   $ref: '#/components/schemas/CategorySales'
 
+  # ========== Extended Module Endpoints ==========
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: User registration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                phone:
+                  type: string
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid request
+
+  /loyalty/users/{user_id}/balance:
+    get:
+      tags: [Loyalty]
+      summary: Get user loyalty balance
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Loyalty account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyAccount'
+
+  /loyalty/users/{user_id}/history:
+    get:
+      tags: [Loyalty]
+      summary: Get loyalty points history
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Loyalty transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoyaltyTransaction'
+
+  /loyalty/points:
+    post:
+      tags: [Loyalty]
+      summary: Add loyalty points
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, order_id, amount]
+              properties:
+                user_id:
+                  type: string
+                order_id:
+                  type: string
+                amount:
+                  type: number
+      responses:
+        '200':
+          description: Points added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyTransaction'
+
+  /loyalty/redeem:
+    post:
+      tags: [Loyalty]
+      summary: Redeem loyalty points
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, reward_id]
+              properties:
+                user_id:
+                  type: string
+                reward_id:
+                  type: string
+      responses:
+        '200':
+          description: Points redeemed
+        '400':
+          description: Insufficient points
+
+  /email/send:
+    post:
+      tags: [Email]
+      summary: Send email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, subject]
+              properties:
+                to:
+                  type: string
+                  format: email
+                subject:
+                  type: string
+                html:
+                  type: string
+                text:
+                  type: string
+                template_id:
+                  type: string
+                variables:
+                  type: object
+      responses:
+        '200':
+          description: Email sent
+
+  /sms/send:
+    post:
+      tags: [SMS]
+      summary: Send SMS
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, text]
+              properties:
+                phone:
+                  type: string
+                text:
+                  type: string
+                sender:
+                  type: string
+      responses:
+        '200':
+          description: SMS sent
+
+  /sms/balance:
+    get:
+      tags: [SMS]
+      summary: Get SMS balance
+      responses:
+        '200':
+          description: SMS balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balance:
+                    type: number
+                  currency:
+                    type: string
+
+  /warehouses:
+    get:
+      tags: [Warehouses]
+      summary: List warehouses
+      responses:
+        '200':
+          description: List of warehouses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Warehouse'
+    post:
+      tags: [Warehouses]
+      summary: Create warehouse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Warehouse'
+      responses:
+        '201':
+          description: Warehouse created
+
+  /warehouses/{id}:
+    get:
+      tags: [Warehouses]
+      summary: Get warehouse by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Warehouse details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Warehouse'
+
+  /warehouses/{id}/stock:
+    get:
+      tags: [Warehouses]
+      summary: Get warehouse stock
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: product_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stock details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarehouseStock'
+
+  /warehouses/transfer:
+    post:
+      tags: [Warehouses]
+      summary: Transfer stock between warehouses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from_warehouse_id, to_warehouse_id, product_id, quantity]
+              properties:
+                from_warehouse_id:
+                  type: string
+                to_warehouse_id:
+                  type: string
+                product_id:
+                  type: string
+                quantity:
+                  type: integer
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Transfer completed
+
+  /erp/sync/products:
+    post:
+      tags: [ERP]
+      summary: Sync products with ERP
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+            enum: [1c, bas, dilovod]
+      responses:
+        '200':
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResult'
+
+  /erp/sync/orders:
+    post:
+      tags: [ERP]
+      summary: Sync orders with ERP
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+            enum: [1c, bas, dilovod]
+      responses:
+        '200':
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResult'
+
+  /marketplace:
+    get:
+      tags: [Marketplace]
+      summary: List available marketplaces
+      responses:
+        '200':
+          description: List of marketplaces
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+
+  /marketplace/sync:
+    post:
+      tags: [Marketplace]
+      summary: Sync products with all marketplaces
+      responses:
+        '200':
+          description: Sync results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SyncResult'
+
+  /webhooks:
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      responses:
+        '200':
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Webhook'
+    post:
+      tags: [Webhooks]
+      summary: Create webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Webhook'
+      responses:
+        '201':
+          description: Webhook created
+
+  /webhooks/{id}:
+    delete:
+      tags: [Webhooks]
+      summary: Delete webhook
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Webhook deleted
+
+  /analytics/abc-xyz:
+    get:
+      tags: [Analytics]
+      summary: Get ABC-XYZ analysis
+      description: Product categorization based on revenue contribution and demand stability
+      responses:
+        '200':
+          description: ABC-XYZ analysis results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ABCXYZAnalysis'
+
+  /analytics/rfm:
+    get:
+      tags: [Analytics]
+      summary: Get RFM analysis
+      description: Customer segmentation based on Recency, Frequency, and Monetary value
+      responses:
+        '200':
+          description: RFM analysis results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFMAnalysis'
+
+  /export/products:
+    get:
+      tags: [Export]
+      summary: Export products
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv, excel]
+            default: excel
+      responses:
+        '200':
+          description: File download
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /export/orders:
+    get:
+      tags: [Export]
+      summary: Export orders
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv, excel]
+            default: excel
+      responses:
+        '200':
+          description: File download
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /storage/upload:
+    post:
+      tags: [Storage]
+      summary: Upload file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                folder:
+                  type: string
+      responses:
+        '201':
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUpload'
+
+  /storage/{key}:
+    delete:
+      tags: [Storage]
+      summary: Delete file
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: File deleted
+
+  /i18n/translate:
+    get:
+      tags: [i18n]
+      summary: Translate text
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: lang
+          in: query
+          schema:
+            type: string
+            default: uk
+            enum: [uk, en, ru]
+      responses:
+        '200':
+          description: Translation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  translation:
+                    type: string
+                  language:
+                    type: string
+
+  /i18n/languages:
+    get:
+      tags: [i18n]
+      summary: Get supported languages
+      responses:
+        '200':
+          description: List of languages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    code:
+                      type: string
+                    name:
+                      type: string
+
+  /logistics/providers:
+    get:
+      tags: [Logistics]
+      summary: Get logistics providers
+      responses:
+        '200':
+          description: List of providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+
+  /alerts:
+    get:
+      tags: [Alerts]
+      summary: Get alerts status
+      responses:
+        '200':
+          description: Alerts status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configured:
+                    type: boolean
+                  types:
+                    type: array
+                    items:
+                      type: string
+
 components:
   schemas:
     Product:
@@ -1224,4 +1859,215 @@ components:
         order_count:
           type: integer
         item_count:
+          type: integer
+
+    # ========== Extended Module Schemas ==========
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [customer, admin, manager]
+
+    LoyaltyAccount:
+      type: object
+      properties:
+        user_id:
+          type: string
+        total_points:
+          type: integer
+        lifetime_points:
+          type: integer
+        tier:
+          type: string
+          enum: [bronze, silver, gold, platinum]
+        tier_points:
+          type: integer
+
+    LoyaltyTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [earn, redeem, expire, adjustment, bonus]
+        points:
+          type: integer
+        balance_after:
+          type: integer
+        order_id:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Warehouse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        is_active:
+          type: boolean
+        is_default:
+          type: boolean
+
+    WarehouseStock:
+      type: object
+      properties:
+        warehouse_id:
+          type: string
+        product_id:
+          type: string
+        quantity:
+          type: integer
+        reserved_quantity:
+          type: integer
+        location:
+          type: string
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        secret:
+          type: string
+
+    SyncResult:
+      type: object
+      properties:
+        marketplace:
+          type: string
+        direction:
+          type: string
+          enum: [export, import]
+        total_items:
+          type: integer
+        successful:
+          type: integer
+        failed:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+
+    ABCXYZAnalysis:
+      type: object
+      properties:
+        total_products:
+          type: integer
+        period:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+        categories:
+          type: object
+          properties:
+            A:
+              type: integer
+            B:
+              type: integer
+            C:
+              type: integer
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: string
+              product_name:
+                type: string
+              abc_class:
+                type: string
+              xyz_class:
+                type: string
+              combined_class:
+                type: string
+              revenue:
+                type: number
+
+    RFMAnalysis:
+      type: object
+      properties:
+        total_customers:
+          type: integer
+        segments:
+          type: object
+          additionalProperties:
+            type: integer
+        customers:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id:
+                type: string
+              recency_score:
+                type: integer
+              frequency_score:
+                type: integer
+              monetary_score:
+                type: integer
+              rfm_score:
+                type: string
+              segment:
+                type: string
+
+    FileUpload:
+      type: object
+      properties:
+        key:
+          type: string
+        url:
+          type: string
+        content_type:
+          type: string
+        size:
           type: integer

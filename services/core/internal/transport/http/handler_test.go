@@ -147,12 +147,68 @@ func (m *MockCategoryRepository) DeleteCategory(ctx context.Context, id string) 
 	return nil
 }
 
+// Mock Cart Repository
+type MockCartRepository struct {
+	carts map[int64][]*pim.CartItem
+}
+
+func NewMockCartRepository() *MockCartRepository {
+	return &MockCartRepository{
+		carts: make(map[int64][]*pim.CartItem),
+	}
+}
+
+func (m *MockCartRepository) AddToCart(ctx context.Context, item *pim.CartItem) error {
+	m.carts[item.UserID] = append(m.carts[item.UserID], item)
+	return nil
+}
+
+func (m *MockCartRepository) GetCart(ctx context.Context, userID int64) ([]*pim.CartItem, error) {
+	return m.carts[userID], nil
+}
+
+func (m *MockCartRepository) RemoveFromCart(ctx context.Context, userID int64, productID string) error {
+	cart := m.carts[userID]
+	for i, item := range cart {
+		if item.ProductID == productID {
+			m.carts[userID] = append(cart[:i], cart[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (m *MockCartRepository) ClearCart(ctx context.Context, userID int64) error {
+	delete(m.carts, userID)
+	return nil
+}
+
+func (m *MockCartRepository) UpdateCartItemQuantity(ctx context.Context, userID int64, productID string, quantity int) error {
+	for _, item := range m.carts[userID] {
+		if item.ProductID == productID {
+			item.Quantity = quantity
+			return nil
+		}
+	}
+	return nil
+}
+
 func setupHandler() (*Handler, *MockRepository, *MockCategoryRepository) {
 	repo := NewMockRepository()
 	catRepo := NewMockCategoryRepository()
 	service := pim.NewService(repo, catRepo)
 	handler := NewHandler(service)
 	return handler, repo, catRepo
+}
+
+func setupHandlerWithCart() (*Handler, *MockRepository, *MockCategoryRepository, *MockCartRepository) {
+	repo := NewMockRepository()
+	catRepo := NewMockCategoryRepository()
+	cartRepo := NewMockCartRepository()
+	service := pim.NewService(repo, catRepo)
+	service.SetCartRepository(cartRepo)
+	handler := NewHandler(service)
+	return handler, repo, catRepo, cartRepo
 }
 
 // ============================================

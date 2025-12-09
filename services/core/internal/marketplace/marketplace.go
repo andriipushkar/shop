@@ -56,6 +56,7 @@ type Product struct {
 	ID            string            `json:"id"`
 	ExternalID    string            `json:"external_id,omitempty"`
 	SKU           string            `json:"sku"`
+	Barcode       string            `json:"barcode,omitempty"`
 	Name          string            `json:"name"`
 	Description   string            `json:"description"`
 	Price         float64           `json:"price"`
