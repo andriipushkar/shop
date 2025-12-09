@@ -1,0 +1,1266 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>cmd: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">core/cmd/main.go (0.0%)</option>
+				
+				<option value="file1">core/internal/eventbus/publisher.go (0.0%)</option>
+				
+				<option value="file2">core/internal/pim/memory_repo.go (0.0%)</option>
+				
+				<option value="file3">core/internal/pim/postgres_repo.go (0.0%)</option>
+				
+				<option value="file4">core/internal/pim/service.go (82.4%)</option>
+				
+				<option value="file5">core/internal/transport/http/feed.go (0.0%)</option>
+				
+				<option value="file6">core/internal/transport/http/handler.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package main
+
+import (
+        "database/sql"
+        "log"
+        "net/http"
+        "os"
+        "time"
+
+        "core/internal/pim"
+        transport "core/internal/transport/http"
+)
+
+func main() <span class="cov0" title="0">{
+        log.Println("Starting Core Service...")
+
+        // Initialize dependencies
+        dbURL := os.Getenv("DATABASE_URL")
+        if dbURL == "" </span><span class="cov0" title="0">{
+                log.Fatal("DATABASE_URL is not set")
+        }</span>
+
+        <span class="cov0" title="0">var db *sql.DB
+        var err error
+
+        // Retry connection logic
+        for i := 0; i &lt; 10; i++ </span><span class="cov0" title="0">{
+                db, err = sql.Open("postgres", dbURL)
+                if err == nil </span><span class="cov0" title="0">{
+                        if err = db.Ping(); err == nil </span><span class="cov0" title="0">{
+                                break</span>
+                        }
+                }
+                <span class="cov0" title="0">log.Printf("Waiting for database... (%d/10)", i+1)
+                time.Sleep(2 * time.Second)</span>
+        }
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                log.Fatalf("Failed to connect to database: %v", err)
+        }</span>
+
+        <span class="cov0" title="0">repo, err := pim.NewPostgresRepository(db)
+        if err != nil </span><span class="cov0" title="0">{
+                log.Fatalf("Failed to initialize repository: %v", err)
+        }</span>
+
+        // PostgresRepository implements both Repository and CategoryRepository
+        <span class="cov0" title="0">service := pim.NewService(repo, repo)
+        handler := transport.NewHandler(service)
+
+        port := os.Getenv("PORT")
+        if port == "" </span><span class="cov0" title="0">{
+                port = "8080"
+        }</span>
+
+        <span class="cov0" title="0">mux := http.NewServeMux()
+        mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) </span><span class="cov0" title="0">{
+                w.WriteHeader(http.StatusOK)
+                w.Write([]byte("OK"))
+        }</span>)
+
+        // Product routes
+        <span class="cov0" title="0">mux.HandleFunc("/feed/rozetka", handler.GenerateFeed)
+        mux.HandleFunc("/products", func(w http.ResponseWriter, r *http.Request) </span><span class="cov0" title="0">{
+                switch r.Method </span>{
+                case http.MethodPost:<span class="cov0" title="0">
+                        handler.CreateProduct(w, r)</span>
+                case http.MethodGet:<span class="cov0" title="0">
+                        handler.ListProducts(w, r)</span>
+                default:<span class="cov0" title="0">
+                        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)</span>
+                }
+        })
+
+        <span class="cov0" title="0">mux.HandleFunc("/products/", func(w http.ResponseWriter, r *http.Request) </span><span class="cov0" title="0">{
+                path := r.URL.Path
+
+                // Handle special endpoints
+                if len(path) &gt; len("/products/") </span><span class="cov0" title="0">{
+                        if path[len(path)-6:] == "/stock" </span><span class="cov0" title="0">{
+                                handler.UpdateStock(w, r)
+                                return
+                        }</span>
+                        <span class="cov0" title="0">if path[len(path)-6:] == "/image" </span><span class="cov0" title="0">{
+                                handler.UpdateImage(w, r)
+                                return
+                        }</span>
+                        <span class="cov0" title="0">if len(path) &gt; 10 &amp;&amp; path[len(path)-10:] == "/decrement" </span><span class="cov0" title="0">{
+                                handler.DecrementStock(w, r)
+                                return
+                        }</span>
+                }
+
+                <span class="cov0" title="0">switch r.Method </span>{
+                case http.MethodGet:<span class="cov0" title="0">
+                        handler.GetProduct(w, r)</span>
+                case http.MethodPut:<span class="cov0" title="0">
+                        handler.UpdateProduct(w, r)</span>
+                case http.MethodDelete:<span class="cov0" title="0">
+                        handler.DeleteProduct(w, r)</span>
+                default:<span class="cov0" title="0">
+                        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)</span>
+                }
+        })
+
+        // Category routes
+        <span class="cov0" title="0">mux.HandleFunc("/categories", func(w http.ResponseWriter, r *http.Request) </span><span class="cov0" title="0">{
+                switch r.Method </span>{
+                case http.MethodPost:<span class="cov0" title="0">
+                        handler.CreateCategory(w, r)</span>
+                case http.MethodGet:<span class="cov0" title="0">
+                        handler.ListCategories(w, r)</span>
+                default:<span class="cov0" title="0">
+                        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)</span>
+                }
+        })
+
+        <span class="cov0" title="0">mux.HandleFunc("/categories/", func(w http.ResponseWriter, r *http.Request) </span><span class="cov0" title="0">{
+                switch r.Method </span>{
+                case http.MethodGet:<span class="cov0" title="0">
+                        handler.GetCategory(w, r)</span>
+                case http.MethodDelete:<span class="cov0" title="0">
+                        handler.DeleteCategory(w, r)</span>
+                default:<span class="cov0" title="0">
+                        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)</span>
+                }
+        })
+
+        <span class="cov0" title="0">log.Printf("Server listening on port %s", port)
+        if err := http.ListenAndServe(":"+port, mux); err != nil </span><span class="cov0" title="0">{
+                log.Fatalf("Failed to start server: %v", err)
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package eventbus
+
+import "context"
+
+// Event represents a generic system event
+type Event struct {
+        Type    string      `json:"type"`
+        Payload interface{} `json:"payload"`
+}
+
+// Publisher defines the interface for publishing events
+type Publisher interface {
+        Publish(ctx context.Context, routingKey string, event Event) error
+}
+
+// NoOpPublisher is a placeholder for testing
+type NoOpPublisher struct{}
+
+func (p *NoOpPublisher) Publish(ctx context.Context, routingKey string, event Event) error <span class="cov0" title="0">{
+        // Log event or do nothing
+        return nil
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package pim
+
+import (
+        "context"
+        "errors"
+        "sync"
+)
+
+// MemoryRepository is an in-memory implementation of Repository
+type MemoryRepository struct {
+        mu       sync.RWMutex
+        products map[string]*Product
+}
+
+// NewMemoryRepository creates a new in-memory repository
+func NewMemoryRepository() *MemoryRepository <span class="cov0" title="0">{
+        return &amp;MemoryRepository{
+                products: make(map[string]*Product),
+        }
+}</span>
+
+// Save saves a product to memory
+func (r *MemoryRepository) Save(ctx context.Context, product *Product) error <span class="cov0" title="0">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+        
+        if product.ID == "" </span><span class="cov0" title="0">{
+                return errors.New("product ID is required")
+        }</span>
+        
+        <span class="cov0" title="0">r.products[product.ID] = product
+        return nil</span>
+}
+
+// GetByID retrieves a product by ID
+func (r *MemoryRepository) GetByID(ctx context.Context, id string) (*Product, error) <span class="cov0" title="0">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+        
+        if p, ok := r.products[id]; ok </span><span class="cov0" title="0">{
+                return p, nil
+        }</span>
+        
+        <span class="cov0" title="0">return nil, errors.New("product not found")</span>
+}
+
+// List returns all products
+func (r *MemoryRepository) List(ctx context.Context) ([]*Product, error) <span class="cov0" title="0">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+        
+        products := make([]*Product, 0, len(r.products))
+        for _, p := range r.products </span><span class="cov0" title="0">{
+                products = append(products, p)
+        }</span>
+        
+        <span class="cov0" title="0">return products, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package pim
+
+import (
+        "context"
+        "database/sql"
+        "errors"
+        "fmt"
+
+        _ "github.com/lib/pq"
+)
+
+type PostgresRepository struct {
+        db *sql.DB
+}
+
+func NewPostgresRepository(db *sql.DB) (*PostgresRepository, error) <span class="cov0" title="0">{
+        repo := &amp;PostgresRepository{db: db}
+        if err := repo.init(); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return repo, nil</span>
+}
+
+func (r *PostgresRepository) init() error <span class="cov0" title="0">{
+        // Create categories table first (products references it)
+        catQuery := `
+        CREATE TABLE IF NOT EXISTS categories (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL
+        );`
+        if _, err := r.db.Exec(catQuery); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov0" title="0">query := `
+        CREATE TABLE IF NOT EXISTS products (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                price DECIMAL(10, 2) NOT NULL,
+                sku TEXT UNIQUE NOT NULL,
+                stock INT NOT NULL DEFAULT 0,
+                category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL
+        );`
+        _, err := r.db.Exec(query)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        // Add stock column if it doesn't exist (for existing tables)
+        <span class="cov0" title="0">_, _ = r.db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS stock INT NOT NULL DEFAULT 0`)
+        // Add category_id column if it doesn't exist
+        _, _ = r.db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES categories(id) ON DELETE SET NULL`)
+        // Add image_url column if it doesn't exist
+        _, _ = r.db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT ''`)
+        return nil</span>
+}
+
+func (r *PostgresRepository) Save(ctx context.Context, p *Product) error <span class="cov0" title="0">{
+        query := `
+        INSERT INTO products (id, name, description, price, sku, stock, image_url, category_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, $10)
+        ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                description = EXCLUDED.description,
+                price = EXCLUDED.price,
+                sku = EXCLUDED.sku,
+                stock = EXCLUDED.stock,
+                image_url = EXCLUDED.image_url,
+                category_id = EXCLUDED.category_id,
+                updated_at = EXCLUDED.updated_at;
+        `
+        _, err := r.db.ExecContext(ctx, query, p.ID, p.Name, p.Description, p.Price, p.SKU, p.Stock, p.ImageURL, p.CategoryID, p.CreatedAt, p.UpdatedAt)
+        return err
+}</span>
+
+func (r *PostgresRepository) GetByID(ctx context.Context, id string) (*Product, error) <span class="cov0" title="0">{
+        query := `
+                SELECT p.id, p.name, p.description, p.price, p.sku, p.stock, COALESCE(p.image_url, ''), COALESCE(p.category_id, ''), p.created_at, p.updated_at,
+                       c.id, c.name, c.created_at
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                WHERE p.id = $1`
+        row := r.db.QueryRowContext(ctx, query, id)
+
+        var p Product
+        var catID, catName sql.NullString
+        var catCreatedAt sql.NullTime
+        if err := row.Scan(&amp;p.ID, &amp;p.Name, &amp;p.Description, &amp;p.Price, &amp;p.SKU, &amp;p.Stock, &amp;p.ImageURL, &amp;p.CategoryID, &amp;p.CreatedAt, &amp;p.UpdatedAt,
+                &amp;catID, &amp;catName, &amp;catCreatedAt); err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, sql.ErrNoRows) </span><span class="cov0" title="0">{
+                        return nil, errors.New("product not found")
+                }</span>
+                <span class="cov0" title="0">return nil, err</span>
+        }
+        <span class="cov0" title="0">if catID.Valid </span><span class="cov0" title="0">{
+                p.Category = &amp;Category{ID: catID.String, Name: catName.String, CreatedAt: catCreatedAt.Time}
+        }</span>
+        <span class="cov0" title="0">return &amp;p, nil</span>
+}
+
+func (r *PostgresRepository) List(ctx context.Context) ([]*Product, error) <span class="cov0" title="0">{
+        query := `
+                SELECT p.id, p.name, p.description, p.price, p.sku, p.stock, COALESCE(p.image_url, ''), COALESCE(p.category_id, ''), p.created_at, p.updated_at,
+                       c.id, c.name, c.created_at
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                ORDER BY p.created_at DESC`
+        rows, err := r.db.QueryContext(ctx, query)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">defer rows.Close()
+
+        var products []*Product
+        for rows.Next() </span><span class="cov0" title="0">{
+                var p Product
+                var catID, catName sql.NullString
+                var catCreatedAt sql.NullTime
+                if err := rows.Scan(&amp;p.ID, &amp;p.Name, &amp;p.Description, &amp;p.Price, &amp;p.SKU, &amp;p.Stock, &amp;p.ImageURL, &amp;p.CategoryID, &amp;p.CreatedAt, &amp;p.UpdatedAt,
+                        &amp;catID, &amp;catName, &amp;catCreatedAt); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov0" title="0">if catID.Valid </span><span class="cov0" title="0">{
+                        p.Category = &amp;Category{ID: catID.String, Name: catName.String, CreatedAt: catCreatedAt.Time}
+                }</span>
+                <span class="cov0" title="0">products = append(products, &amp;p)</span>
+        }
+        <span class="cov0" title="0">return products, rows.Err()</span>
+}
+
+func (r *PostgresRepository) ListWithFilter(ctx context.Context, filter ProductFilter) ([]*Product, error) <span class="cov0" title="0">{
+        query := `
+                SELECT p.id, p.name, p.description, p.price, p.sku, p.stock, COALESCE(p.image_url, ''), COALESCE(p.category_id, ''), p.created_at, p.updated_at,
+                       c.id, c.name, c.created_at
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                WHERE 1=1`
+        var args []interface{}
+        argNum := 1
+
+        if filter.Search != "" </span><span class="cov0" title="0">{
+                query += fmt.Sprintf(" AND (LOWER(p.name) LIKE LOWER($%d) OR LOWER(p.sku) LIKE LOWER($%d))", argNum, argNum)
+                args = append(args, "%"+filter.Search+"%")
+                argNum++
+        }</span>
+
+        <span class="cov0" title="0">if filter.MinPrice != nil </span><span class="cov0" title="0">{
+                query += fmt.Sprintf(" AND p.price &gt;= $%d", argNum)
+                args = append(args, *filter.MinPrice)
+                argNum++
+        }</span>
+
+        <span class="cov0" title="0">if filter.MaxPrice != nil </span><span class="cov0" title="0">{
+                query += fmt.Sprintf(" AND p.price &lt;= $%d", argNum)
+                args = append(args, *filter.MaxPrice)
+                argNum++
+        }</span>
+
+        <span class="cov0" title="0">if filter.CategoryID != "" </span><span class="cov0" title="0">{
+                query += fmt.Sprintf(" AND p.category_id = $%d", argNum)
+                args = append(args, filter.CategoryID)
+                argNum++
+        }</span>
+
+        <span class="cov0" title="0">query += " ORDER BY p.created_at DESC"
+
+        rows, err := r.db.QueryContext(ctx, query, args...)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">defer rows.Close()
+
+        var products []*Product
+        for rows.Next() </span><span class="cov0" title="0">{
+                var p Product
+                var catID, catName sql.NullString
+                var catCreatedAt sql.NullTime
+                if err := rows.Scan(&amp;p.ID, &amp;p.Name, &amp;p.Description, &amp;p.Price, &amp;p.SKU, &amp;p.Stock, &amp;p.ImageURL, &amp;p.CategoryID, &amp;p.CreatedAt, &amp;p.UpdatedAt,
+                        &amp;catID, &amp;catName, &amp;catCreatedAt); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov0" title="0">if catID.Valid </span><span class="cov0" title="0">{
+                        p.Category = &amp;Category{ID: catID.String, Name: catName.String, CreatedAt: catCreatedAt.Time}
+                }</span>
+                <span class="cov0" title="0">products = append(products, &amp;p)</span>
+        }
+        <span class="cov0" title="0">return products, rows.Err()</span>
+}
+
+func (r *PostgresRepository) Delete(ctx context.Context, id string) error <span class="cov0" title="0">{
+        query := `DELETE FROM products WHERE id = $1`
+        result, err := r.db.ExecContext(ctx, query, id)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">rows, err := result.RowsAffected()
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">if rows == 0 </span><span class="cov0" title="0">{
+                return errors.New("product not found")
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (r *PostgresRepository) UpdateStock(ctx context.Context, id string, stock int) error <span class="cov0" title="0">{
+        query := `UPDATE products SET stock = $1, updated_at = NOW() WHERE id = $2`
+        result, err := r.db.ExecContext(ctx, query, stock, id)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">rows, err := result.RowsAffected()
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">if rows == 0 </span><span class="cov0" title="0">{
+                return errors.New("product not found")
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (r *PostgresRepository) DecrementStock(ctx context.Context, id string, quantity int) error <span class="cov0" title="0">{
+        query := `UPDATE products SET stock = stock - $1, updated_at = NOW() WHERE id = $2 AND stock &gt;= $1`
+        result, err := r.db.ExecContext(ctx, query, quantity, id)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">rows, err := result.RowsAffected()
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">if rows == 0 </span><span class="cov0" title="0">{
+                return errors.New("insufficient stock or product not found")
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (r *PostgresRepository) UpdateImage(ctx context.Context, id string, imageURL string) error <span class="cov0" title="0">{
+        query := `UPDATE products SET image_url = $1, updated_at = NOW() WHERE id = $2`
+        result, err := r.db.ExecContext(ctx, query, imageURL, id)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">rows, err := result.RowsAffected()
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">if rows == 0 </span><span class="cov0" title="0">{
+                return errors.New("product not found")
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+// Category methods
+
+func (r *PostgresRepository) SaveCategory(ctx context.Context, c *Category) error <span class="cov0" title="0">{
+        query := `
+        INSERT INTO categories (id, name, created_at)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+        `
+        _, err := r.db.ExecContext(ctx, query, c.ID, c.Name, c.CreatedAt)
+        return err
+}</span>
+
+func (r *PostgresRepository) GetCategoryByID(ctx context.Context, id string) (*Category, error) <span class="cov0" title="0">{
+        query := `SELECT id, name, created_at FROM categories WHERE id = $1`
+        row := r.db.QueryRowContext(ctx, query, id)
+
+        var c Category
+        if err := row.Scan(&amp;c.ID, &amp;c.Name, &amp;c.CreatedAt); err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, sql.ErrNoRows) </span><span class="cov0" title="0">{
+                        return nil, errors.New("category not found")
+                }</span>
+                <span class="cov0" title="0">return nil, err</span>
+        }
+        <span class="cov0" title="0">return &amp;c, nil</span>
+}
+
+func (r *PostgresRepository) ListCategories(ctx context.Context) ([]*Category, error) <span class="cov0" title="0">{
+        query := `SELECT id, name, created_at FROM categories ORDER BY name`
+        rows, err := r.db.QueryContext(ctx, query)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">defer rows.Close()
+
+        var categories []*Category
+        for rows.Next() </span><span class="cov0" title="0">{
+                var c Category
+                if err := rows.Scan(&amp;c.ID, &amp;c.Name, &amp;c.CreatedAt); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov0" title="0">categories = append(categories, &amp;c)</span>
+        }
+        <span class="cov0" title="0">return categories, rows.Err()</span>
+}
+
+func (r *PostgresRepository) DeleteCategory(ctx context.Context, id string) error <span class="cov0" title="0">{
+        query := `DELETE FROM categories WHERE id = $1`
+        result, err := r.db.ExecContext(ctx, query, id)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">rows, err := result.RowsAffected()
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">if rows == 0 </span><span class="cov0" title="0">{
+                return errors.New("category not found")
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package pim
+
+import (
+        "context"
+        "errors"
+        "time"
+
+        "github.com/google/uuid"
+)
+
+// Category represents a product category
+type Category struct {
+        ID        string    `json:"id"`
+        Name      string    `json:"name"`
+        CreatedAt time.Time `json:"created_at"`
+}
+
+// Product represents a simplified product entity
+type Product struct {
+        ID          string    `json:"id"`
+        Name        string    `json:"name"`
+        Description string    `json:"description"`
+        Price       float64   `json:"price"`
+        SKU         string    `json:"sku"`
+        Stock       int       `json:"stock"`
+        ImageURL    string    `json:"image_url,omitempty"`
+        CategoryID  string    `json:"category_id,omitempty"`
+        Category    *Category `json:"category,omitempty"`
+        CreatedAt   time.Time `json:"created_at"`
+        UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// ProductFilter contains search and filter parameters
+type ProductFilter struct {
+        Search     string
+        MinPrice   *float64
+        MaxPrice   *float64
+        CategoryID string
+}
+
+// Review represents a product review
+type Review struct {
+        ID        string    `json:"id"`
+        ProductID string    `json:"product_id"`
+        UserID    int64     `json:"user_id"`
+        UserName  string    `json:"user_name"`
+        Rating    int       `json:"rating"` // 1-5
+        Comment   string    `json:"comment"`
+        CreatedAt time.Time `json:"created_at"`
+}
+
+// Repository defines the interface for product storage
+type Repository interface {
+        Save(ctx context.Context, product *Product) error
+        GetByID(ctx context.Context, id string) (*Product, error)
+        List(ctx context.Context) ([]*Product, error)
+        ListWithFilter(ctx context.Context, filter ProductFilter) ([]*Product, error)
+        Delete(ctx context.Context, id string) error
+        UpdateStock(ctx context.Context, id string, stock int) error
+        DecrementStock(ctx context.Context, id string, quantity int) error
+        UpdateImage(ctx context.Context, id string, imageURL string) error
+}
+
+// CategoryRepository defines the interface for category storage
+type CategoryRepository interface {
+        SaveCategory(ctx context.Context, category *Category) error
+        GetCategoryByID(ctx context.Context, id string) (*Category, error)
+        ListCategories(ctx context.Context) ([]*Category, error)
+        DeleteCategory(ctx context.Context, id string) error
+}
+
+// Service handles PIM business logic
+type Service struct {
+        repo     Repository
+        catRepo  CategoryRepository
+}
+
+// NewService creates a new PIM service
+func NewService(repo Repository, catRepo CategoryRepository) *Service <span class="cov10" title="19">{
+        return &amp;Service{repo: repo, catRepo: catRepo}
+}</span>
+
+// CreateProduct creates a new product and validates it
+func (s *Service) CreateProduct(ctx context.Context, p *Product) error <span class="cov8" title="11">{
+        if p.Name == "" </span><span class="cov1" title="1">{
+                return errors.New("product name is required")
+        }</span>
+        <span class="cov8" title="10">if p.ID == "" </span><span class="cov7" title="9">{
+                p.ID = uuid.New().String()
+        }</span>
+        <span class="cov8" title="10">if p.Price &lt; 0 </span><span class="cov1" title="1">{
+                return errors.New("product price cannot be negative")
+        }</span>
+
+        <span class="cov7" title="9">p.CreatedAt = time.Now()
+        p.UpdatedAt = time.Now()
+
+        return s.repo.Save(ctx, p)</span>
+}
+
+// List returns all products
+func (s *Service) List(ctx context.Context) ([]*Product, error) <span class="cov0" title="0">{
+        return s.repo.List(ctx)
+}</span>
+
+// ListWithFilter returns products matching the filter
+func (s *Service) ListWithFilter(ctx context.Context, filter ProductFilter) ([]*Product, error) <span class="cov0" title="0">{
+        return s.repo.ListWithFilter(ctx, filter)
+}</span>
+
+func (s *Service) UpdateProduct(ctx context.Context, p *Product) error <span class="cov0" title="0">{
+        if p.ID == "" </span><span class="cov0" title="0">{
+                return errors.New("product ID is required for update")
+        }</span>
+        <span class="cov0" title="0">p.UpdatedAt = time.Now()
+        // We can reuse Save for upsert, but we should probably check if it exists if we want strict update behavior.
+        // For MVP, Save (Upsert) is acceptable.
+        return s.repo.Save(ctx, p)</span>
+}
+
+func (s *Service) DeleteProduct(ctx context.Context, id string) error <span class="cov1" title="1">{
+        return s.repo.Delete(ctx, id)
+}</span>
+
+func (s *Service) GetProduct(ctx context.Context, id string) (*Product, error) <span class="cov6" title="6">{
+        return s.repo.GetByID(ctx, id)
+}</span>
+
+func (s *Service) UpdateStock(ctx context.Context, id string, stock int) error <span class="cov3" title="2">{
+        if stock &lt; 0 </span><span class="cov1" title="1">{
+                return errors.New("stock cannot be negative")
+        }</span>
+        <span class="cov1" title="1">return s.repo.UpdateStock(ctx, id, stock)</span>
+}
+
+func (s *Service) DecrementStock(ctx context.Context, id string, quantity int) error <span class="cov4" title="3">{
+        if quantity &lt;= 0 </span><span class="cov1" title="1">{
+                return errors.New("quantity must be positive")
+        }</span>
+        <span class="cov3" title="2">return s.repo.DecrementStock(ctx, id, quantity)</span>
+}
+
+func (s *Service) UpdateImage(ctx context.Context, id string, imageURL string) error <span class="cov1" title="1">{
+        return s.repo.UpdateImage(ctx, id, imageURL)
+}</span>
+
+// Category methods
+
+func (s *Service) CreateCategory(ctx context.Context, c *Category) error <span class="cov6" title="6">{
+        if c.Name == "" </span><span class="cov1" title="1">{
+                return errors.New("category name is required")
+        }</span>
+        <span class="cov5" title="5">if c.ID == "" </span><span class="cov5" title="5">{
+                c.ID = uuid.New().String()
+        }</span>
+        <span class="cov5" title="5">c.CreatedAt = time.Now()
+        return s.catRepo.SaveCategory(ctx, c)</span>
+}
+
+func (s *Service) ListCategories(ctx context.Context) ([]*Category, error) <span class="cov1" title="1">{
+        return s.catRepo.ListCategories(ctx)
+}</span>
+
+func (s *Service) GetCategory(ctx context.Context, id string) (*Category, error) <span class="cov3" title="2">{
+        return s.catRepo.GetCategoryByID(ctx, id)
+}</span>
+
+func (s *Service) DeleteCategory(ctx context.Context, id string) error <span class="cov1" title="1">{
+        return s.catRepo.DeleteCategory(ctx, id)
+}</span>
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package http
+
+import (
+        "encoding/xml"
+        "fmt"
+        "net/http"
+        "time"
+)
+
+type YMLCatalog struct {
+        XMLName xml.Name `xml:"yml_catalog"`
+        Date    string   `xml:"date,attr"`
+        Shop    Shop     `xml:"shop"`
+}
+
+type Shop struct {
+        Name       string     `xml:"name"`
+        Company    string     `xml:"company"`
+        Url        string     `xml:"url"`
+        Currencies Currencies `xml:"currencies"`
+        Offers     Offers     `xml:"offers"`
+}
+
+type Currencies struct {
+        Currency []Currency `xml:"currency"`
+}
+
+type Currency struct {
+        ID   string `xml:"id,attr"`
+        Rate string `xml:"rate,attr"`
+}
+
+type Offers struct {
+        Offer []Offer `xml:"offer"`
+}
+
+type Offer struct {
+        ID          string  `xml:"id,attr"`
+        Available   bool    `xml:"available,attr"`
+        Name        string  `xml:"name"`
+        Price       float64 `xml:"price"`
+        CurrencyID  string  `xml:"currencyId"`
+        Description string  `xml:"description"`
+        SKU         string  `xml:"vendorCode"`
+}
+
+func (h *Handler) GenerateFeed(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        products, err := h.service.List(r.Context())
+        if err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Internal error", http.StatusInternalServerError)
+                return
+        }</span>
+
+        <span class="cov0" title="0">catalog := YMLCatalog{
+                Date: time.Now().Format("2006-01-02 15:04"),
+                Shop: Shop{
+                        Name:    "MyShop",
+                        Company: "MyShop LLC",
+                        Url:     "http://myshop.com",
+                        Currencies: Currencies{
+                                Currency: []Currency{
+                                        {ID: "UAH", Rate: "1"},
+                                },
+                        },
+                },
+        }
+
+        for _, p := range products </span><span class="cov0" title="0">{
+                catalog.Shop.Offers.Offer = append(catalog.Shop.Offers.Offer, Offer{
+                        ID:          p.ID,
+                        Available:   true,
+                        Name:        p.Name,
+                        Price:       p.Price,
+                        CurrencyID:  "UAH",
+                        Description: fmt.Sprintf("%s (%s)", p.Name, p.SKU),
+                        SKU:         p.SKU,
+                })
+        }</span>
+
+        <span class="cov0" title="0">w.Header().Set("Content-Type", "application/xml")
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte(xml.Header))
+        if err := xml.NewEncoder(w).Encode(catalog); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Failed to encode XML", http.StatusInternalServerError)
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package http
+
+import (
+        "encoding/json"
+        "fmt"
+        "net/http"
+
+        "core/internal/pim"
+)
+
+type Handler struct {
+        service *pim.Service
+}
+
+func NewHandler(service *pim.Service) *Handler <span class="cov0" title="0">{
+        return &amp;Handler{service: service}
+}</span>
+
+func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodPost </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        <span class="cov0" title="0">var p pim.Product
+        if err := json.NewDecoder(r.Body).Decode(&amp;p); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Invalid request body", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">if err := h.service.CreateProduct(r.Context(), &amp;p); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusCreated)
+        json.NewEncoder(w).Encode(p)</span>
+}
+
+func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodGet </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        // Parse query parameters
+        <span class="cov0" title="0">query := r.URL.Query()
+        filter := pim.ProductFilter{
+                Search:     query.Get("search"),
+                CategoryID: query.Get("category_id"),
+        }
+
+        if minPrice := query.Get("min_price"); minPrice != "" </span><span class="cov0" title="0">{
+                var price float64
+                if _, err := fmt.Sscanf(minPrice, "%f", &amp;price); err == nil </span><span class="cov0" title="0">{
+                        filter.MinPrice = &amp;price
+                }</span>
+        }
+
+        <span class="cov0" title="0">if maxPrice := query.Get("max_price"); maxPrice != "" </span><span class="cov0" title="0">{
+                var price float64
+                if _, err := fmt.Sscanf(maxPrice, "%f", &amp;price); err == nil </span><span class="cov0" title="0">{
+                        filter.MaxPrice = &amp;price
+                }</span>
+        }
+
+        <span class="cov0" title="0">var products []*pim.Product
+        var err error
+
+        // Use filter if any parameter is set
+        if filter.Search != "" || filter.MinPrice != nil || filter.MaxPrice != nil || filter.CategoryID != "" </span><span class="cov0" title="0">{
+                products, err = h.service.ListWithFilter(r.Context(), filter)
+        }</span> else<span class="cov0" title="0"> {
+                products, err = h.service.List(r.Context())
+        }</span>
+
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Internal server error", http.StatusInternalServerError)
+                return
+        }</span>
+
+        // Return empty array instead of null
+        <span class="cov0" title="0">if products == nil </span><span class="cov0" title="0">{
+                products = []*pim.Product{}
+        }</span>
+
+        <span class="cov0" title="0">w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(products)</span>
+}
+
+func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodPut </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        // Extract ID from path: /products/{id}
+        <span class="cov0" title="0">id := r.URL.Path[len("/products/"):]
+        if id == "" </span><span class="cov0" title="0">{
+                http.Error(w, "ID is required", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">var p pim.Product
+        if err := json.NewDecoder(r.Body).Decode(&amp;p); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Invalid request body", http.StatusBadRequest)
+                return
+        }</span>
+        <span class="cov0" title="0">p.ID = id
+
+        if err := h.service.UpdateProduct(r.Context(), &amp;p); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">w.WriteHeader(http.StatusOK)
+        json.NewEncoder(w).Encode(p)</span>
+}
+
+func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodDelete </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        // Extract ID from path: /products/{id}
+        <span class="cov0" title="0">id := r.URL.Path[len("/products/"):]
+        if id == "" </span><span class="cov0" title="0">{
+                http.Error(w, "ID is required", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">if err := h.service.DeleteProduct(r.Context(), id); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">w.WriteHeader(http.StatusNoContent)</span>
+}
+
+func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodGet </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        // Extract ID from path: /products/{id}
+        <span class="cov0" title="0">id := r.URL.Path[len("/products/"):]
+        if id == "" </span><span class="cov0" title="0">{
+                http.Error(w, "ID is required", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">product, err := h.service.GetProduct(r.Context(), id)
+        if err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusNotFound)
+                return
+        }</span>
+
+        <span class="cov0" title="0">w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(product)</span>
+}
+
+type StockRequest struct {
+        Stock    int `json:"stock"`
+        Quantity int `json:"quantity"`
+}
+
+func (h *Handler) UpdateStock(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodPatch </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        // Extract ID from path: /products/{id}/stock
+        <span class="cov0" title="0">path := r.URL.Path[len("/products/"):]
+        id := path[:len(path)-len("/stock")]
+        if id == "" </span><span class="cov0" title="0">{
+                http.Error(w, "ID is required", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">var req StockRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;req); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Invalid request body", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">if err := h.service.UpdateStock(r.Context(), id, req.Stock); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">w.WriteHeader(http.StatusOK)
+        json.NewEncoder(w).Encode(map[string]string{"status": "ok"})</span>
+}
+
+func (h *Handler) DecrementStock(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodPost </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        // Extract ID from path: /products/{id}/decrement
+        <span class="cov0" title="0">path := r.URL.Path[len("/products/"):]
+        id := path[:len(path)-len("/decrement")]
+        if id == "" </span><span class="cov0" title="0">{
+                http.Error(w, "ID is required", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">var req StockRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;req); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Invalid request body", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">if err := h.service.DecrementStock(r.Context(), id, req.Quantity); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">w.WriteHeader(http.StatusOK)
+        json.NewEncoder(w).Encode(map[string]string{"status": "ok"})</span>
+}
+
+type ImageRequest struct {
+        ImageURL string `json:"image_url"`
+}
+
+func (h *Handler) UpdateImage(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodPatch </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        // Extract ID from path: /products/{id}/image
+        <span class="cov0" title="0">path := r.URL.Path[len("/products/"):]
+        id := path[:len(path)-len("/image")]
+        if id == "" </span><span class="cov0" title="0">{
+                http.Error(w, "ID is required", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">var req ImageRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;req); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Invalid request body", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">if err := h.service.UpdateImage(r.Context(), id, req.ImageURL); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">w.WriteHeader(http.StatusOK)
+        json.NewEncoder(w).Encode(map[string]string{"status": "ok"})</span>
+}
+
+// Category handlers
+
+func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodPost </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        <span class="cov0" title="0">var c pim.Category
+        if err := json.NewDecoder(r.Body).Decode(&amp;c); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Invalid request body", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">if err := h.service.CreateCategory(r.Context(), &amp;c); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusCreated)
+        json.NewEncoder(w).Encode(c)</span>
+}
+
+func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodGet </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        <span class="cov0" title="0">categories, err := h.service.ListCategories(r.Context())
+        if err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Internal server error", http.StatusInternalServerError)
+                return
+        }</span>
+
+        // Return empty array instead of null
+        <span class="cov0" title="0">if categories == nil </span><span class="cov0" title="0">{
+                categories = []*pim.Category{}
+        }</span>
+
+        <span class="cov0" title="0">w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(categories)</span>
+}
+
+func (h *Handler) GetCategory(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodGet </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        <span class="cov0" title="0">id := r.URL.Path[len("/categories/"):]
+        if id == "" </span><span class="cov0" title="0">{
+                http.Error(w, "ID is required", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">category, err := h.service.GetCategory(r.Context(), id)
+        if err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusNotFound)
+                return
+        }</span>
+
+        <span class="cov0" title="0">w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(category)</span>
+}
+
+func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+        if r.Method != http.MethodDelete </span><span class="cov0" title="0">{
+                http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        <span class="cov0" title="0">id := r.URL.Path[len("/categories/"):]
+        if id == "" </span><span class="cov0" title="0">{
+                http.Error(w, "ID is required", http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">if err := h.service.DeleteCategory(r.Context(), id); err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusBadRequest)
+                return
+        }</span>
+
+        <span class="cov0" title="0">w.WriteHeader(http.StatusNoContent)</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

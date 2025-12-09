@@ -155,3 +155,129 @@ export async function getOrders(userId: number): Promise<Order[]> {
         return [];
     }
 }
+
+// Cart API functions
+export interface ApiCartItem {
+    user_id: number;
+    product_id: string;
+    name: string;
+    price: number;
+    quantity: number;
+    image_url?: string;
+}
+
+export async function getCart(userId: number): Promise<ApiCartItem[]> {
+    try {
+        const res = await fetch(`${CORE_URL}/cart/${userId}`, {
+            cache: 'no-store',
+        });
+
+        if (!res.ok) {
+            console.error('Failed to fetch cart:', res.status);
+            return [];
+        }
+
+        return res.json();
+    } catch (error) {
+        console.error('Error fetching cart:', error);
+        return [];
+    }
+}
+
+export async function addToCartApi(userId: number, productId: string, quantity: number = 1): Promise<boolean> {
+    try {
+        const res = await fetch(`${CORE_URL}/cart/${userId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id: productId, quantity }),
+        });
+
+        return res.ok;
+    } catch (error) {
+        console.error('Error adding to cart:', error);
+        return false;
+    }
+}
+
+export async function clearCartApi(userId: number): Promise<boolean> {
+    try {
+        const res = await fetch(`${CORE_URL}/cart/${userId}`, {
+            method: 'DELETE',
+        });
+
+        return res.ok;
+    } catch (error) {
+        console.error('Error clearing cart:', error);
+        return false;
+    }
+}
+
+export async function removeFromCartApi(userId: number, productId: string): Promise<boolean> {
+    try {
+        const res = await fetch(`${CORE_URL}/cart/${userId}/item/${productId}`, {
+            method: 'DELETE',
+        });
+
+        return res.ok;
+    } catch (error) {
+        console.error('Error removing from cart:', error);
+        return false;
+    }
+}
+
+export async function updateCartQuantityApi(userId: number, productId: string, quantity: number): Promise<boolean> {
+    try {
+        const res = await fetch(`${CORE_URL}/cart/${userId}/item/${productId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quantity }),
+        });
+
+        return res.ok;
+    } catch (error) {
+        console.error('Error updating cart:', error);
+        return false;
+    }
+}
+
+// Promo code API
+export interface PromoValidation {
+    valid: boolean;
+    discount: number;
+    code?: string;
+}
+
+export async function validatePromoCode(code: string): Promise<PromoValidation> {
+    try {
+        const res = await fetch(`${OMS_URL}/promo/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+        });
+
+        if (!res.ok) {
+            return { valid: false, discount: 0 };
+        }
+
+        const data = await res.json();
+        return { valid: true, discount: data.discount, code: data.code };
+    } catch (error) {
+        console.error('Error validating promo:', error);
+        return { valid: false, discount: 0 };
+    }
+}
+
+export async function usePromoCode(code: string): Promise<boolean> {
+    try {
+        const res = await fetch(`${OMS_URL}/promo/use`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+        });
+
+        return res.ok;
+    } catch (error) {
+        console.error('Error using promo:', error);
+        return false;
+    }
+}

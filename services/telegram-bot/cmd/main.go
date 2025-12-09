@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"telegram-bot/internal/bot"
@@ -42,12 +44,25 @@ func main() {
 		crmURL = "http://localhost:8082"
 	}
 
+	// Parse admin IDs from environment
+	var adminIDs []int64
+	adminIDsStr := os.Getenv("ADMIN_IDS")
+	if adminIDsStr != "" {
+		for _, idStr := range strings.Split(adminIDsStr, ",") {
+			idStr = strings.TrimSpace(idStr)
+			if id, err := strconv.ParseInt(idStr, 10, 64); err == nil {
+				adminIDs = append(adminIDs, id)
+			}
+		}
+		log.Printf("Loaded %d admin IDs", len(adminIDs))
+	}
+
 	// Remove any existing webhook to ensure long polling works
 	if err := b.RemoveWebhook(); err != nil {
 		log.Printf("Warning: could not remove webhook: %v", err)
 	}
 
-	handler := bot.NewHandler(b, coreURL, omsURL, crmURL)
+	handler := bot.NewHandler(b, coreURL, omsURL, crmURL, adminIDs)
 	handler.RegisterRoutes()
 
 	log.Println("Telegram Bot started")

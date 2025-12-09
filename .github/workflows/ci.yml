@@ -1,0 +1,377 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      # Core Service Tests
+      - name: Test Core Service
+        run: |
+          cd services/core
+          go mod download
+          go test -v -race -coverprofile=coverage.out ./...
+
+      # OMS Service Tests
+      - name: Test OMS Service
+        run: |
+          cd services/oms
+          go mod download
+          go test -v -race -coverprofile=coverage.out ./...
+
+      # Telegram Bot Tests
+      - name: Test Telegram Bot
+        run: |
+          cd services/telegram-bot
+          go mod download
+          go test -v -race -coverprofile=coverage.out ./...
+
+      # CRM Service Tests
+      - name: Test CRM Service
+        run: |
+          cd services/crm
+          go mod download
+          go test -v -race -coverprofile=coverage.out ./...
+
+      # Notification Service Tests
+      - name: Test Notification Service
+        run: |
+          cd services/notification
+          go mod download
+          go test -v -race -coverprofile=coverage.out ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build Core Service
+        run: |
+          cd services/core
+          go build -o core ./cmd/main.go
+
+      - name: Build OMS Service
+        run: |
+          cd services/oms
+          go build -o oms ./cmd/main.go
+
+      - name: Build Telegram Bot
+        run: |
+          cd services/telegram-bot
+          go build -o telegram-bot ./cmd/main.go
+
+      - name: Build CRM Service
+        run: |
+          cd services/crm
+          go build -o crm ./cmd/main.go
+
+      - name: Build Notification Service
+        run: |
+          cd services/notification
+          go build -o notification ./cmd/main.go
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run golangci-lint on Core
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: services/core
+          args: --timeout=5m
+
+      - name: Run golangci-lint on OMS
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: services/oms
+          args: --timeout=5m
+
+      - name: Run golangci-lint on Telegram Bot
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: services/telegram-bot
+          args: --timeout=5m
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Core Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/core
+          push: false
+          tags: shop-core:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build OMS Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/oms
+          push: false
+          tags: shop-oms:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Telegram Bot Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/telegram-bot
+          push: false
+          tags: shop-telegram-bot:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build CRM Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/crm
+          push: false
+          tags: shop-crm:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Notification Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/notification
+          push: false
+          tags: shop-notification:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  coverage:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Generate Coverage for Core
+        run: |
+          cd services/core
+          go test -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out
+
+      - name: Generate Coverage for OMS
+        run: |
+          cd services/oms
+          go test -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out
+
+      - name: Generate Coverage for Telegram Bot
+        run: |
+          cd services/telegram-bot
+          go test -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out
+
+      - name: Generate Coverage for CRM
+        run: |
+          cd services/crm
+          go test -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out
+
+      - name: Generate Coverage for Notification
+        run: |
+          cd services/notification
+          go test -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out
+
+  storefront:
+    name: Storefront Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/storefront/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd services/storefront
+          npm ci
+
+      - name: Run linter
+        run: |
+          cd services/storefront
+          npm run lint || true
+
+      - name: Build
+        run: |
+          cd services/storefront
+          npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8080
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: shop
+          POSTGRES_PASSWORD: shop
+          POSTGRES_DB: shop_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run Integration Tests
+        env:
+          DATABASE_URL: postgres://shop:shop@localhost:5432/shop_test?sslmode=disable
+          REDIS_URL: redis://localhost:6379
+        run: |
+          cd services/core
+          go test -v -tags=integration ./...
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run Gosec Security Scanner on Core
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt json -out gosec-core.json ./services/core/...'
+
+      - name: Run Gosec Security Scanner on OMS
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt json -out gosec-oms.json ./services/oms/...'
+
+      - name: Run Gosec Security Scanner on Telegram Bot
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt json -out gosec-bot.json ./services/telegram-bot/...'
+
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: gosec-results
+          path: gosec-*.json
+          if-no-files-found: ignore
+
+  notify:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [test, build, storefront]
+    if: failure()
+
+    steps:
+      - name: Send failure notification
+        run: |
+          echo "CI failed! Check the logs for details."
+          # Add Telegram/Slack notification here if needed

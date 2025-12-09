@@ -1,0 +1,52 @@
+# Build stage
+FROM golang:1.23-alpine AS builder
+
+ARG VERSION=dev
+ARG BUILD_TIME=unknown
+
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /build
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build with optimizations
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o /app/server ./cmd/main.go
+
+# Download migrate tool
+RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+RUN cp /go/bin/migrate /app/migrate
+
+# Final stage
+FROM alpine:3.19
+
+RUN apk --no-cache add ca-certificates tzdata curl
+
+WORKDIR /app
+
+# Copy binary and migrations
+COPY --from=builder /app/server /app/server
+COPY --from=builder /app/migrate /app/migrate
+COPY --from=builder /build/migrations /app/migrations
+
+# Create non-root user
+RUN addgroup -g 1000 -S app && \
+    adduser -u 1000 -S app -G app && \
+    chown -R app:app /app
+
+USER app
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+EXPOSE 8080
+
+ENTRYPOINT ["/app/server"]

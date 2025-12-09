@@ -1,9 +1,12 @@
-go 1.23.3
+go 1.24.0
+
+toolchain go1.24.11
 
 use (
 	./services/core
-	./services/telegram-bot
-	./services/oms
-	./services/notification
 	./services/crm
+	./services/notification
+	./services/oms
+	./services/telegram-bot
+	./tests
 )

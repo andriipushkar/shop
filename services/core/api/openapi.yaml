@@ -1,0 +1,1227 @@
+openapi: 3.0.3
+info:
+  title: Core Service API
+  description: E-commerce Core Service - Product Information Management
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+
+tags:
+  - name: Products
+    description: Product management
+  - name: Categories
+    description: Category management
+  - name: Cart
+    description: Shopping cart operations
+  - name: Wishlist
+    description: Wishlist operations
+  - name: Search
+    description: Full-text search powered by Elasticsearch
+  - name: Reviews
+    description: Product reviews and ratings
+  - name: Recommendations
+    description: Product recommendations
+  - name: Inventory
+    description: Inventory management and alerts
+  - name: Analytics
+    description: Sales analytics and dashboard
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns detailed health status of all components
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is unhealthy
+
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      description: Simple liveness check for Kubernetes
+      responses:
+        '200':
+          description: Service is alive
+
+  /products:
+    get:
+      tags: [Products]
+      summary: List all products
+      parameters:
+        - name: category_id
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+    post:
+      tags: [Products]
+      summary: Create a new product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Invalid request
+
+  /products/{id}:
+    get:
+      tags: [Products]
+      summary: Get product by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Product not found
+    put:
+      tags: [Products]
+      summary: Update product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Product updated
+        '404':
+          description: Product not found
+    delete:
+      tags: [Products]
+      summary: Delete product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Product deleted
+        '404':
+          description: Product not found
+
+  /products/{id}/stock:
+    patch:
+      tags: [Products]
+      summary: Update product stock
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                stock:
+                  type: integer
+      responses:
+        '200':
+          description: Stock updated
+
+  /products/{id}/price-history:
+    get:
+      tags: [Products]
+      summary: Get price history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Price history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PriceHistory'
+
+  /categories:
+    get:
+      tags: [Categories]
+      summary: List all categories
+      responses:
+        '200':
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+    post:
+      tags: [Categories]
+      summary: Create a new category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '201':
+          description: Category created
+
+  /categories/{id}:
+    get:
+      tags: [Categories]
+      summary: Get category by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Category details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+    delete:
+      tags: [Categories]
+      summary: Delete category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Category deleted
+
+  /cart/{user_id}:
+    get:
+      tags: [Cart]
+      summary: Get user's cart
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Cart contents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+    post:
+      tags: [Cart]
+      summary: Add item to cart
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddToCartRequest'
+      responses:
+        '200':
+          description: Item added
+    delete:
+      tags: [Cart]
+      summary: Clear cart
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Cart cleared
+
+  /cart/{user_id}/item/{product_id}:
+    patch:
+      tags: [Cart]
+      summary: Update cart item quantity
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity:
+                  type: integer
+      responses:
+        '200':
+          description: Quantity updated
+    delete:
+      tags: [Cart]
+      summary: Remove item from cart
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Item removed
+
+  /wishlist/{user_id}:
+    get:
+      tags: [Wishlist]
+      summary: Get user's wishlist
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Wishlist contents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wishlist'
+    post:
+      tags: [Wishlist]
+      summary: Add item to wishlist
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                product_id:
+                  type: integer
+      responses:
+        '200':
+          description: Item added
+    delete:
+      tags: [Wishlist]
+      summary: Clear wishlist
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Wishlist cleared
+
+  /wishlist/{user_id}/item/{product_id}:
+    delete:
+      tags: [Wishlist]
+      summary: Remove item from wishlist
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Item removed
+
+  /wishlist/{user_id}/item/{product_id}/to-cart:
+    post:
+      tags: [Wishlist]
+      summary: Move item from wishlist to cart
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Item moved to cart
+
+  /search:
+    get:
+      tags: [Search]
+      summary: Search products
+      description: Full-text search with filters, sorting, and pagination
+      parameters:
+        - name: q
+          in: query
+          description: Search query
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          schema:
+            type: string
+        - name: min_price
+          in: query
+          schema:
+            type: number
+        - name: max_price
+          in: query
+          schema:
+            type: number
+        - name: in_stock
+          in: query
+          schema:
+            type: boolean
+        - name: sort
+          in: query
+          description: Sort by (price_asc, price_desc, name, newest, relevance)
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResult'
+
+  /search/suggest:
+    get:
+      tags: [Search]
+      summary: Get search suggestions
+      description: Autocomplete suggestions for search
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search prefix
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Search suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      type: string
+
+  /search/reindex:
+    post:
+      tags: [Search]
+      summary: Reindex all products
+      description: Trigger full reindex of products to Elasticsearch
+      responses:
+        '200':
+          description: Reindex started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+
+  /reviews:
+    post:
+      tags: [Reviews]
+      summary: Create a review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewRequest'
+      responses:
+        '201':
+          description: Review created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+
+  /reviews/{id}:
+    get:
+      tags: [Reviews]
+      summary: Get review by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Review details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+    delete:
+      tags: [Reviews]
+      summary: Delete review
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Review deleted
+
+  /products/{id}/reviews:
+    get:
+      tags: [Reviews]
+      summary: Get product reviews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+
+  /products/{id}/rating:
+    get:
+      tags: [Reviews]
+      summary: Get product rating
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product rating
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductRating'
+
+  /products/{id}/similar:
+    get:
+      tags: [Recommendations]
+      summary: Get similar products
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Similar products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+
+  /products/{id}/frequently-bought-together:
+    get:
+      tags: [Recommendations]
+      summary: Get frequently bought together
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Frequently bought together products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+
+  /recommendations/popular:
+    get:
+      tags: [Recommendations]
+      summary: Get popular products
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Popular products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+
+  /users/{id}/recommendations:
+    get:
+      tags: [Recommendations]
+      summary: Get personalized recommendations
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Personalized recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+
+  /users/{id}/reviews:
+    get:
+      tags: [Reviews]
+      summary: Get user reviews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+
+  /inventory/low-stock:
+    get:
+      tags: [Inventory]
+      summary: Get low stock products
+      parameters:
+        - name: threshold
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Low stock products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LowStockProduct'
+
+  /inventory/out-of-stock:
+    get:
+      tags: [Inventory]
+      summary: Get out of stock products
+      responses:
+        '200':
+          description: Out of stock products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+
+  /inventory/stats:
+    get:
+      tags: [Inventory]
+      summary: Get inventory statistics
+      responses:
+        '200':
+          description: Inventory statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryStats'
+
+  /analytics/dashboard:
+    get:
+      tags: [Analytics]
+      summary: Get analytics dashboard
+      responses:
+        '200':
+          description: Analytics dashboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsDashboard'
+
+  /analytics/top-products:
+    get:
+      tags: [Analytics]
+      summary: Get top selling products
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Top selling products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductSalesStats'
+
+  /analytics/daily-sales:
+    get:
+      tags: [Analytics]
+      summary: Get daily sales report
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Daily sales
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DailySales'
+
+  /analytics/by-category:
+    get:
+      tags: [Analytics]
+      summary: Get sales by category
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Sales by category
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategorySales'
+
+components:
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: float
+        stock:
+          type: integer
+        category_id:
+          type: integer
+        image_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateProductRequest:
+      type: object
+      required: [name, price]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        stock:
+          type: integer
+        category_id:
+          type: integer
+        image_url:
+          type: string
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        stock:
+          type: integer
+        category_id:
+          type: integer
+        image_url:
+          type: string
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+
+    CreateCategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    Cart:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+        total:
+          type: number
+
+    CartItem:
+      type: object
+      properties:
+        product_id:
+          type: integer
+        product:
+          $ref: '#/components/schemas/Product'
+        quantity:
+          type: integer
+        subtotal:
+          type: number
+
+    AddToCartRequest:
+      type: object
+      required: [product_id]
+      properties:
+        product_id:
+          type: integer
+        quantity:
+          type: integer
+          default: 1
+
+    Wishlist:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WishlistItem'
+
+    WishlistItem:
+      type: object
+      properties:
+        product_id:
+          type: integer
+        product:
+          $ref: '#/components/schemas/Product'
+        added_at:
+          type: string
+          format: date-time
+
+    PriceHistory:
+      type: object
+      properties:
+        id:
+          type: integer
+        product_id:
+          type: integer
+        old_price:
+          type: number
+        new_price:
+          type: number
+        changed_at:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        components:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+              message:
+                type: string
+              duration_ms:
+                type: integer
+
+    SearchResult:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchProduct'
+        total:
+          type: integer
+        took_ms:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+
+    SearchProduct:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+        category:
+          type: string
+        price:
+          type: number
+        stock:
+          type: integer
+        image_url:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+        product_id:
+          type: string
+        user_id:
+          type: integer
+        user_name:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CreateReviewRequest:
+      type: object
+      required: [product_id, user_id, rating]
+      properties:
+        product_id:
+          type: string
+        user_id:
+          type: integer
+        user_name:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+
+    ProductRating:
+      type: object
+      properties:
+        product_id:
+          type: string
+        average_rating:
+          type: number
+        review_count:
+          type: integer
+
+    Recommendation:
+      type: object
+      properties:
+        product:
+          $ref: '#/components/schemas/Product'
+        reason:
+          type: string
+          description: Why this product is recommended (similar_category, popular, etc.)
+        score:
+          type: number
+
+    LowStockProduct:
+      type: object
+      properties:
+        product:
+          $ref: '#/components/schemas/Product'
+        stock:
+          type: integer
+        threshold:
+          type: integer
+
+    InventoryStats:
+      type: object
+      properties:
+        total_products:
+          type: integer
+        out_of_stock:
+          type: integer
+        low_stock:
+          type: integer
+        in_stock:
+          type: integer
+        total_inventory_value:
+          type: number
+
+    AnalyticsDashboard:
+      type: object
+      properties:
+        total_revenue:
+          type: number
+        total_orders:
+          type: integer
+        total_products:
+          type: integer
+        total_categories:
+          type: integer
+        average_order_value:
+          type: number
+        top_products:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductSalesStats'
+        daily_sales:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailySales'
+        sales_by_category:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategorySales'
+
+    ProductSalesStats:
+      type: object
+      properties:
+        product_id:
+          type: string
+        product_name:
+          type: string
+        total_quantity:
+          type: integer
+        total_revenue:
+          type: number
+        order_count:
+          type: integer
+        avg_order_value:
+          type: number
+
+    DailySales:
+      type: object
+      properties:
+        date:
+          type: string
+        total_orders:
+          type: integer
+        total_revenue:
+          type: number
+        total_items:
+          type: integer
+
+    CategorySales:
+      type: object
+      properties:
+        category_id:
+          type: string
+        category_name:
+          type: string
+        total_revenue:
+          type: number
+        order_count:
+          type: integer
+        item_count:
+          type: integer
