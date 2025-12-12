@@ -1,93 +1,24 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/lib/cart-context';
 import { Order } from '@/lib/api';
+import NovaPoshtaSelector, { DeliverySelection } from '@/components/NovaPoshtaSelector';
+import PaymentSelector, { PaymentSelection, LiqPayForm } from '@/components/PaymentSelector';
+import { sendOrderConfirmation } from '@/lib/email';
 import {
     ArrowLeftIcon,
     TruckIcon,
-    BuildingStorefrontIcon,
     CreditCardIcon,
-    BanknotesIcon,
     CheckIcon,
     ShieldCheckIcon,
-    ClockIcon,
-    MapPinIcon,
     PhoneIcon,
     UserIcon,
     EnvelopeIcon,
     TagIcon,
 } from '@heroicons/react/24/outline';
-
-// Delivery options
-const deliveryOptions = [
-    {
-        id: 'nova_poshta',
-        name: 'Нова Пошта',
-        description: 'Доставка у відділення',
-        price: 0,
-        freeFrom: 1000,
-        time: '1-3 дні',
-        icon: '🚚',
-    },
-    {
-        id: 'nova_poshta_courier',
-        name: 'Нова Пошта Кур\'єр',
-        description: 'Доставка за адресою',
-        price: 70,
-        freeFrom: 2000,
-        time: '1-2 дні',
-        icon: '🏃',
-    },
-    {
-        id: 'ukrposhta',
-        name: 'Укрпошта',
-        description: 'Економна доставка',
-        price: 45,
-        freeFrom: 1500,
-        time: '3-7 днів',
-        icon: '📮',
-    },
-    {
-        id: 'pickup',
-        name: 'Самовивіз',
-        description: 'м. Київ, вул. Хрещатик, 1',
-        price: 0,
-        freeFrom: 0,
-        time: 'Сьогодні',
-        icon: '🏪',
-    },
-];
-
-// Payment options
-const paymentOptions = [
-    {
-        id: 'card_online',
-        name: 'Картка онлайн',
-        description: 'Visa, Mastercard, Google Pay, Apple Pay',
-        icon: CreditCardIcon,
-    },
-    {
-        id: 'liqpay',
-        name: 'LiqPay',
-        description: 'Оплата через LiqPay',
-        icon: CreditCardIcon,
-    },
-    {
-        id: 'privat24',
-        name: 'Приват24',
-        description: 'Оплата через Приват24',
-        icon: CreditCardIcon,
-    },
-    {
-        id: 'cash',
-        name: 'Накладений платіж',
-        description: 'Оплата при отриманні',
-        icon: BanknotesIcon,
-    },
-];
 
 function generateIdempotencyKey(userId: number, productId: string): string {
     const timestamp = Date.now();
@@ -105,14 +36,19 @@ export default function CheckoutPage() {
     const [phone, setPhone] = useState('');
     const [email, setEmail] = useState('');
 
-    // Delivery
-    const [deliveryMethod, setDeliveryMethod] = useState('nova_poshta');
-    const [city, setCity] = useState('');
-    const [warehouse, setWarehouse] = useState('');
-    const [address, setAddress] = useState('');
+    // Delivery - using new NovaPoshtaSelector
+    const [deliverySelection, setDeliverySelection] = useState<DeliverySelection>({
+        type: 'warehouse',
+        city: null,
+        warehouse: null,
+        price: 0,
+    });
 
-    // Payment
-    const [paymentMethod, setPaymentMethod] = useState('card_online');
+    // Payment - using new PaymentSelector
+    const [paymentSelection, setPaymentSelection] = useState<PaymentSelection>({
+        method: 'cash',
+        commission: 0,
+    });
 
     // Promo
     const [promoCode, setPromoCode] = useState('');
@@ -127,12 +63,24 @@ export default function CheckoutPage() {
     const [error, setError] = useState('');
     const [comment, setComment] = useState('');
 
+    // LiqPay payment state
+    const [showLiqPayForm, setShowLiqPayForm] = useState(false);
+    const [liqPayOrderId, setLiqPayOrderId] = useState('');
+
     const idempotencyKeysRef = useRef<Map<string, string>>(new Map());
 
-    const selectedDelivery = deliveryOptions.find(d => d.id === deliveryMethod);
-    const deliveryPrice = selectedDelivery && totalPrice >= selectedDelivery.freeFrom ? 0 : (selectedDelivery?.price || 0);
+    const deliveryPrice = deliverySelection.price;
     const discountAmount = totalPrice * (promoDiscount / 100);
-    const finalPrice = totalPrice - discountAmount + deliveryPrice;
+    const commission = paymentSelection.commission;
+    const finalPrice = totalPrice - discountAmount + deliveryPrice + commission;
+
+    const handleDeliveryChange = useCallback((selection: DeliverySelection) => {
+        setDeliverySelection(selection);
+    }, []);
+
+    const handlePaymentChange = useCallback((selection: PaymentSelection) => {
+        setPaymentSelection(selection);
+    }, []);
 
     const validatePromo = async () => {
         if (!promoCode.trim()) return;
@@ -169,6 +117,43 @@ export default function CheckoutPage() {
         }
     };
 
+    const getDeliveryAddress = (): string => {
+        if (deliverySelection.type === 'courier') {
+            return `${deliverySelection.city?.Description || ''}, ${deliverySelection.address || ''}`;
+        }
+        if (deliverySelection.type === 'warehouse') {
+            return `${deliverySelection.city?.Description || ''}, ${deliverySelection.warehouse?.Description || ''}`;
+        }
+        // ukrposhta
+        return `${deliverySelection.city?.Description || ''}, ${deliverySelection.address || ''}`;
+    };
+
+    const getDeliveryMethodName = (): string => {
+        switch (deliverySelection.type) {
+            case 'warehouse':
+                return 'Нова Пошта (відділення)';
+            case 'courier':
+                return 'Нова Пошта (кур\'єр)';
+            case 'ukrposhta':
+                return 'Укрпошта';
+            default:
+                return 'Нова Пошта';
+        }
+    };
+
+    const getPaymentMethodName = (): string => {
+        switch (paymentSelection.method) {
+            case 'liqpay':
+                return 'Картка онлайн (LiqPay)';
+            case 'cash':
+                return 'Готівкою при отриманні';
+            case 'cod':
+                return 'Накладений платіж';
+            default:
+                return 'Готівкою';
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -177,8 +162,18 @@ export default function CheckoutPage() {
             return;
         }
 
-        if (deliveryMethod !== 'pickup' && !city.trim()) {
-            setError('Вкажіть місто доставки');
+        if (!deliverySelection.city) {
+            setError('Оберіть місто доставки');
+            return;
+        }
+
+        if (deliverySelection.type === 'warehouse' && !deliverySelection.warehouse) {
+            setError('Оберіть відділення Нової Пошти');
+            return;
+        }
+
+        if ((deliverySelection.type === 'courier' || deliverySelection.type === 'ukrposhta') && !deliverySelection.address) {
+            setError('Вкажіть адресу доставки');
             return;
         }
 
@@ -191,11 +186,7 @@ export default function CheckoutPage() {
         setError('');
 
         const createdOrders: Order[] = [];
-        const fullAddress = deliveryMethod === 'pickup'
-            ? 'Самовивіз: м. Київ, вул. Хрещатик, 1'
-            : deliveryMethod.includes('courier')
-                ? `${city}, ${address}`
-                : `${city}, ${warehouse}`;
+        const fullAddress = getDeliveryAddress();
 
         try {
             for (const item of items) {
@@ -216,12 +207,14 @@ export default function CheckoutPage() {
                         phone: phone.trim(),
                         email: email.trim(),
                         address: fullAddress,
-                        delivery_method: deliveryMethod,
-                        payment_method: paymentMethod,
+                        delivery_method: deliverySelection.type,
+                        payment_method: paymentSelection.method,
                         promo_code: promoDiscount > 0 ? promoCode.trim() : '',
                         discount: promoDiscount,
                         comment: comment.trim(),
                         idempotency_key: idempotencyKey,
+                        delivery_price: deliveryPrice,
+                        cod_commission: commission,
                     }),
                 });
 
@@ -241,8 +234,40 @@ export default function CheckoutPage() {
                 });
             }
 
-            setOrders(createdOrders);
-            await clearCart();
+            // Send order confirmation email
+            if (email.trim()) {
+                try {
+                    await sendOrderConfirmation({
+                        orderId: createdOrders.map(o => o.id).join(', '),
+                        customerName: `${firstName} ${lastName}`,
+                        customerEmail: email.trim(),
+                        customerPhone: phone.trim(),
+                        items: items.map(item => ({
+                            name: item.product.name,
+                            quantity: item.quantity,
+                            price: item.product.price,
+                        })),
+                        subtotal: totalPrice,
+                        deliveryPrice: deliveryPrice,
+                        total: finalPrice,
+                        deliveryType: deliverySelection.type,
+                        deliveryAddress: fullAddress,
+                        paymentMethod: getPaymentMethodName(),
+                    });
+                } catch (emailError) {
+                    console.error('Failed to send confirmation email:', emailError);
+                }
+            }
+
+            // If LiqPay payment selected, show payment form
+            if (paymentSelection.method === 'liqpay') {
+                setLiqPayOrderId(createdOrders.map(o => o.id).join('-'));
+                setOrders(createdOrders);
+                setShowLiqPayForm(true);
+            } else {
+                setOrders(createdOrders);
+                await clearCart();
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Помилка оформлення');
         } finally {
@@ -250,8 +275,61 @@ export default function CheckoutPage() {
         }
     };
 
+    // LiqPay Payment Screen
+    if (showLiqPayForm && orders.length > 0) {
+        return (
+            <main className="min-h-screen bg-gray-50 py-8">
+                <div className="max-w-2xl mx-auto px-4">
+                    <div className="bg-white rounded-2xl shadow-sm p-8">
+                        <div className="text-center mb-8">
+                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <CreditCardIcon className="w-8 h-8 text-green-600" />
+                            </div>
+                            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                                Оплата замовлення
+                            </h1>
+                            <p className="text-gray-500">
+                                Натисніть кнопку нижче для переходу до оплати
+                            </p>
+                        </div>
+
+                        <div className="bg-gray-50 rounded-xl p-6 mb-6">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-gray-600">Замовлення:</span>
+                                <span className="font-mono text-sm">{liqPayOrderId}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600">До сплати:</span>
+                                <span className="text-xl font-bold text-gray-900">{finalPrice.toLocaleString()} грн</span>
+                            </div>
+                        </div>
+
+                        <LiqPayForm
+                            orderId={liqPayOrderId}
+                            amount={finalPrice}
+                            description={`Замовлення ${liqPayOrderId}`}
+                            customerEmail={email}
+                            customerPhone={phone}
+                            customerName={`${firstName} ${lastName}`}
+                        />
+
+                        <button
+                            onClick={async () => {
+                                await clearCart();
+                                router.push('/orders');
+                            }}
+                            className="w-full mt-4 py-3 text-gray-600 hover:text-gray-900 text-sm"
+                        >
+                            Оплатити пізніше
+                        </button>
+                    </div>
+                </div>
+            </main>
+        );
+    }
+
     // Success screen
-    if (orders.length > 0) {
+    if (orders.length > 0 && !showLiqPayForm) {
         return (
             <main className="min-h-screen bg-gray-50 py-8">
                 <div className="max-w-2xl mx-auto px-4">
@@ -275,13 +353,19 @@ export default function CheckoutPage() {
                                 <PhoneIcon className="w-5 h-5 text-gray-400" />
                                 <span>{phone}</span>
                             </div>
+                            {email && (
+                                <div className="flex items-center gap-3">
+                                    <EnvelopeIcon className="w-5 h-5 text-gray-400" />
+                                    <span>{email}</span>
+                                </div>
+                            )}
                             <div className="flex items-center gap-3">
                                 <TruckIcon className="w-5 h-5 text-gray-400" />
-                                <span>{selectedDelivery?.name}</span>
+                                <span>{getDeliveryMethodName()}</span>
                             </div>
                             <div className="flex items-center gap-3">
                                 <CreditCardIcon className="w-5 h-5 text-gray-400" />
-                                <span>{paymentOptions.find(p => p.id === paymentMethod)?.name}</span>
+                                <span>{getPaymentMethodName()}</span>
                             </div>
                         </div>
 
@@ -309,6 +393,19 @@ export default function CheckoutPage() {
                                 className="bg-gray-100 text-gray-700 px-8 py-4 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
                             >
                                 Мої замовлення
+                            </Link>
+                        </div>
+
+                        <div className="mt-6 pt-6 border-t">
+                            <p className="text-sm text-gray-500 mb-3">
+                                Після відправки ви зможете відстежити посилку:
+                            </p>
+                            <Link
+                                href="/tracking"
+                                className="inline-flex items-center gap-2 text-teal-600 hover:text-teal-700 font-medium"
+                            >
+                                <TruckIcon className="w-5 h-5" />
+                                Відстежити посилку за ТТН
                             </Link>
                         </div>
                     </div>
@@ -428,156 +525,21 @@ export default function CheckoutPage() {
                                 </div>
                             </div>
 
-                            {/* Delivery Method */}
+                            {/* Delivery Method - Nova Poshta Selector */}
                             <div className="bg-white rounded-2xl shadow-sm p-6">
-                                <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                                    <TruckIcon className="w-6 h-6 text-teal-600" />
-                                    Спосіб доставки
-                                </h2>
-
-                                <div className="grid sm:grid-cols-2 gap-4 mb-6">
-                                    {deliveryOptions.map((option) => (
-                                        <label
-                                            key={option.id}
-                                            className={`relative flex items-start gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all ${
-                                                deliveryMethod === option.id
-                                                    ? 'border-teal-500 bg-teal-50'
-                                                    : 'border-gray-200 hover:border-gray-300'
-                                            }`}
-                                        >
-                                            <input
-                                                type="radio"
-                                                name="delivery"
-                                                value={option.id}
-                                                checked={deliveryMethod === option.id}
-                                                onChange={(e) => setDeliveryMethod(e.target.value)}
-                                                className="sr-only"
-                                            />
-                                            <span className="text-2xl">{option.icon}</span>
-                                            <div className="flex-1">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="font-semibold text-gray-900">{option.name}</span>
-                                                    {option.price === 0 || totalPrice >= option.freeFrom ? (
-                                                        <span className="text-teal-600 text-sm font-medium">Безкоштовно</span>
-                                                    ) : (
-                                                        <span className="text-gray-600 text-sm">{option.price} грн</span>
-                                                    )}
-                                                </div>
-                                                <p className="text-sm text-gray-500 mt-1">{option.description}</p>
-                                                <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
-                                                    <ClockIcon className="w-3 h-3" />
-                                                    {option.time}
-                                                </div>
-                                            </div>
-                                            {deliveryMethod === option.id && (
-                                                <div className="absolute top-2 right-2 w-5 h-5 bg-teal-500 rounded-full flex items-center justify-center">
-                                                    <CheckIcon className="w-3 h-3 text-white" />
-                                                </div>
-                                            )}
-                                        </label>
-                                    ))}
-                                </div>
-
-                                {/* Delivery Address Fields */}
-                                {deliveryMethod !== 'pickup' && (
-                                    <div className="space-y-4 pt-4 border-t">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Місто *
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={city}
-                                                onChange={(e) => setCity(e.target.value)}
-                                                placeholder="Київ"
-                                                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
-                                                required
-                                            />
-                                        </div>
-                                        {deliveryMethod.includes('courier') ? (
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Адреса доставки *
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={address}
-                                                    onChange={(e) => setAddress(e.target.value)}
-                                                    placeholder="вул. Хрещатик, 1, кв. 10"
-                                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
-                                                    required
-                                                />
-                                            </div>
-                                        ) : (
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Відділення / Поштомат *
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={warehouse}
-                                                    onChange={(e) => setWarehouse(e.target.value)}
-                                                    placeholder="Відділення №1"
-                                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
-                                                    required
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {deliveryMethod === 'pickup' && (
-                                    <div className="flex items-start gap-3 p-4 bg-teal-50 rounded-xl">
-                                        <MapPinIcon className="w-5 h-5 text-teal-600 mt-0.5" />
-                                        <div>
-                                            <p className="font-medium text-gray-900">Адреса самовивозу</p>
-                                            <p className="text-sm text-gray-600">м. Київ, вул. Хрещатик, 1</p>
-                                            <p className="text-sm text-gray-500 mt-1">Пн-Пт: 9:00-20:00, Сб-Нд: 10:00-18:00</p>
-                                        </div>
-                                    </div>
-                                )}
+                                <NovaPoshtaSelector
+                                    cartTotal={totalPrice - discountAmount}
+                                    onSelectionChange={handleDeliveryChange}
+                                />
                             </div>
 
                             {/* Payment Method */}
                             <div className="bg-white rounded-2xl shadow-sm p-6">
-                                <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                                    <CreditCardIcon className="w-6 h-6 text-teal-600" />
-                                    Спосіб оплати
-                                </h2>
-
-                                <div className="grid sm:grid-cols-2 gap-4">
-                                    {paymentOptions.map((option) => (
-                                        <label
-                                            key={option.id}
-                                            className={`relative flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all ${
-                                                paymentMethod === option.id
-                                                    ? 'border-teal-500 bg-teal-50'
-                                                    : 'border-gray-200 hover:border-gray-300'
-                                            }`}
-                                        >
-                                            <input
-                                                type="radio"
-                                                name="payment"
-                                                value={option.id}
-                                                checked={paymentMethod === option.id}
-                                                onChange={(e) => setPaymentMethod(e.target.value)}
-                                                className="sr-only"
-                                            />
-                                            <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
-                                                <option.icon className="w-5 h-5 text-gray-600" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <span className="font-semibold text-gray-900">{option.name}</span>
-                                                <p className="text-xs text-gray-500 mt-0.5">{option.description}</p>
-                                            </div>
-                                            {paymentMethod === option.id && (
-                                                <div className="w-5 h-5 bg-teal-500 rounded-full flex items-center justify-center">
-                                                    <CheckIcon className="w-3 h-3 text-white" />
-                                                </div>
-                                            )}
-                                        </label>
-                                    ))}
-                                </div>
+                                <PaymentSelector
+                                    cartTotal={totalPrice - discountAmount}
+                                    deliveryPrice={deliveryPrice}
+                                    onSelectionChange={handlePaymentChange}
+                                />
                             </div>
 
                             {/* Comment */}
@@ -683,6 +645,12 @@ export default function CheckoutPage() {
                                             {deliveryPrice === 0 ? 'Безкоштовно' : `${deliveryPrice} грн`}
                                         </span>
                                     </div>
+                                    {commission > 0 && (
+                                        <div className="flex justify-between text-orange-600">
+                                            <span>Комісія НП</span>
+                                            <span>+{commission} грн</span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex justify-between items-center py-4 border-t border-b mb-6">
@@ -703,7 +671,7 @@ export default function CheckoutPage() {
                                     disabled={isSubmitting}
                                     className="w-full bg-teal-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {isSubmitting ? 'Оформлення...' : 'Підтвердити замовлення'}
+                                    {isSubmitting ? 'Оформлення...' : paymentSelection.method === 'liqpay' ? 'Перейти до оплати' : 'Підтвердити замовлення'}
                                 </button>
 
                                 {/* Security Info */}

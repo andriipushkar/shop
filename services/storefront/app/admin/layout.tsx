@@ -24,12 +24,14 @@ import {
     DocumentTextIcon,
     ChatBubbleLeftRightIcon,
     UserGroupIcon,
+    BuildingStorefrontIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
     { name: 'Дашборд', href: '/admin', icon: Squares2X2Icon },
     { name: 'Товари', href: '/admin/products', icon: ShoppingBagIcon },
     { name: 'Замовлення', href: '/admin/orders', icon: ClipboardDocumentListIcon },
+    { name: 'Склад', href: '/admin/warehouse', icon: BuildingStorefrontIcon },
     { name: 'Клієнти', href: '/admin/customers', icon: UsersIcon },
     { name: 'Категорії', href: '/admin/categories', icon: TagIcon },
     { name: 'Промокоди', href: '/admin/promo', icon: TicketIcon },

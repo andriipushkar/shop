@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { CartProvider } from "@/lib/cart-context";
+import { AuthProvider } from "@/lib/auth-context";
+import { WishlistProvider } from "@/lib/wishlist-context";
+import { RecentlyViewedProvider } from "@/lib/recently-viewed-context";
+import { ComparisonProvider } from "@/lib/comparison-context";
+import { ReviewsProvider } from "@/lib/reviews-context";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
@@ -30,13 +35,23 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
-        <CartProvider>
-          <Header />
-          <main className="flex-1">
-            {children}
-          </main>
-          <Footer />
-        </CartProvider>
+        <AuthProvider>
+          <CartProvider>
+            <WishlistProvider>
+              <RecentlyViewedProvider>
+                <ComparisonProvider>
+                  <ReviewsProvider>
+                    <Header />
+                    <main className="flex-1">
+                      {children}
+                    </main>
+                    <Footer />
+                  </ReviewsProvider>
+                </ComparisonProvider>
+              </RecentlyViewedProvider>
+            </WishlistProvider>
+          </CartProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -1,0 +1,31 @@
+id,name,sku,category,price,currentStock,avgDailySales,leadTimeDays,status
+1,iPhone 15 Pro Max 256GB,APPL-IP15PM-256,Смартфони,54999,5,3,14,critical
+2,Samsung Galaxy S24 Ultra,SAMS-S24U-256,Смартфони,49999,150,8,10,ok
+3,MacBook Pro 14 M3,APPL-MBP14-M3,Ноутбуки,89999,25,2,21,ok
+4,AirPods Pro 2,APPL-APP2,Навушники,9999,500,25,7,overstock
+5,Sony WH-1000XM5,SONY-WH1000,Навушники,14999,30,4,14,reorder_now
+6,iPad Pro 12.9 M2,APPL-IPADP-129,Планшети,44999,8,1,21,ok
+7,Samsung Galaxy Tab S9,SAMS-TABS9,Планшети,34999,45,3,10,ok
+8,Apple Watch Ultra 2,APPL-AWU2,Смарт-годинники,34999,12,2,14,reorder_now
+9,Xiaomi 14 Ultra,XIAO-14U,Смартфони,39999,0,5,7,critical
+10,Google Pixel 8 Pro,GOOG-PX8P,Смартфони,36999,75,6,10,ok
+11,Nintendo Switch OLED,NINT-SWOLED,Ігрові консолі,14999,200,15,7,overstock
+12,PlayStation 5,SONY-PS5,Ігрові консолі,22999,3,8,14,critical
+13,Xbox Series X,MSFT-XSX,Ігрові консолі,19999,40,5,14,ok
+14,DJI Mini 4 Pro,DJI-MINI4P,Дрони,34999,15,1,21,ok
+15,GoPro Hero 12,GOPR-H12,Екшн-камери,17999,60,4,10,ok
+16,Canon EOS R6 II,CANN-R6II,Фотокамери,99999,5,0.5,30,ok
+17,Sony A7 IV,SONY-A7IV,Фотокамери,89999,8,0.3,30,ok
+18,Dyson V15 Detect,DYSO-V15,Побутова техніка,29999,20,2,14,ok
+19,Roborock S8 Pro Ultra,ROBO-S8PU,Роботи-пилососи,39999,35,3,10,ok
+20,LG OLED55C3,LG-OLED55C3,Телевізори,54999,10,1,21,ok
+21,Samsung QN85B 65,SAMS-QN85B65,Телевізори,64999,7,0.8,21,ok
+22,Bose QuietComfort Ultra,BOSE-QCULT,Навушники,16999,25,3,10,ok
+23,JBL Charge 5,JBL-CHG5,Портативні колонки,6999,100,10,7,ok
+24,Marshall Stanmore III,MARS-STAN3,Акустика,14999,15,1,14,ok
+25,Anker PowerCore 26800,ANKR-PC26800,Повербанки,2499,300,20,5,overstock
+26,Logitech MX Master 3S,LOGI-MXM3S,Комп'ютерна периферія,4499,80,5,7,ok
+27,Keychron Q1 Pro,KEYC-Q1P,Клавіатури,7999,40,2,14,ok
+28,Razer DeathAdder V3,RAZR-DAV3,Миші,3499,55,4,7,ok
+29,SteelSeries Arctis Nova Pro,STEL-ANP,Ігрові гарнітури,12999,20,2,10,ok
+30,ASUS ROG Ally,ASUS-ROGALLY,Портативні консолі,27999,18,3,14,reorder_now

@@ -3,14 +3,17 @@
 import { Product } from '@/lib/api';
 import { Product as MockProduct } from '@/lib/mock-data';
 import { useCart } from '@/lib/cart-context';
-import { useState } from 'react';
+import { useWishlist } from '@/lib/wishlist-context';
+import { useComparison } from '@/lib/comparison-context';
+import { useRecentlyViewed } from '@/lib/recently-viewed-context';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
     ShoppingCartIcon,
     HeartIcon,
     EyeIcon,
     CheckIcon,
-    StarIcon,
+    ScaleIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon, StarIcon as StarSolidIcon } from '@heroicons/react/24/solid';
 
@@ -21,10 +24,15 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, showQuickView = true }: ProductCardProps) {
     const { addToCart } = useCart();
+    const { isInWishlist, toggleWishlist } = useWishlist();
+    const { isInComparison, toggleComparison, canAdd } = useComparison();
+    const { addToRecentlyViewed } = useRecentlyViewed();
     const [added, setAdded] = useState(false);
     const [imageError, setImageError] = useState(false);
-    const [isWishlisted, setIsWishlisted] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
+
+    const isWishlisted = isInWishlist(product.id);
+    const isCompared = isInComparison(product.id);
 
     const isOutOfStock = product.stock <= 0;
     const isLowStock = product.stock > 0 && product.stock < 5;
@@ -50,11 +58,37 @@ export default function ProductCard({ product, showQuickView = true }: ProductCa
     const handleWishlist = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        setIsWishlisted(!isWishlisted);
+        toggleWishlist({
+            productId: product.id,
+            name: product.name,
+            price: product.price,
+            image: product.image_url,
+        });
+    };
+
+    const handleComparison = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isCompared && !canAdd) return; // Max 4 items
+        toggleComparison({
+            productId: product.id,
+            name: product.name,
+            price: product.price,
+            image: product.image_url,
+        });
+    };
+
+    const handleClick = () => {
+        addToRecentlyViewed({
+            productId: product.id,
+            name: product.name,
+            price: product.price,
+            image: product.image_url,
+        });
     };
 
     return (
-        <Link href={`/product/${product.id}`}>
+        <Link href={`/product/${product.id}`} onClick={handleClick}>
             <div
                 className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 card-hover relative"
                 onMouseEnter={() => setIsHovered(true)}
@@ -85,13 +119,26 @@ export default function ProductCard({ product, showQuickView = true }: ProductCa
                                 ? 'bg-red-500 text-white'
                                 : 'bg-white/90 text-gray-600 hover:bg-red-50 hover:text-red-500'
                         } shadow-md`}
-                        title="Додати до бажань"
+                        title={isWishlisted ? 'Видалити з бажань' : 'Додати до бажань'}
                     >
                         {isWishlisted ? (
                             <HeartSolidIcon className="w-5 h-5" />
                         ) : (
                             <HeartIcon className="w-5 h-5" />
                         )}
+                    </button>
+                    <button
+                        onClick={handleComparison}
+                        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${
+                            isCompared
+                                ? 'bg-teal-500 text-white'
+                                : !canAdd
+                                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'bg-white/90 text-gray-600 hover:bg-teal-50 hover:text-teal-600'
+                        } shadow-md`}
+                        title={isCompared ? 'Видалити з порівняння' : canAdd ? 'Додати до порівняння' : 'Максимум 4 товари'}
+                    >
+                        <ScaleIcon className="w-5 h-5" />
                     </button>
                     {showQuickView && (
                         <button

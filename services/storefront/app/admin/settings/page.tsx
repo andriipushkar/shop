@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
     BuildingStorefrontIcon,
     CreditCardIcon,
@@ -12,6 +13,7 @@ import {
     PhoneIcon,
     MapPinIcon,
     CheckIcon,
+    ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline';
 
 const tabs = [
@@ -203,9 +205,18 @@ export default function AdminSettingsPage() {
 
                     {activeTab === 'payment' && (
                         <div className="bg-white rounded-xl shadow-sm p-6 space-y-6">
-                            <h2 className="text-lg font-semibold text-gray-900 pb-4 border-b">
-                                Способи оплати
-                            </h2>
+                            <div className="flex items-center justify-between pb-4 border-b">
+                                <h2 className="text-lg font-semibold text-gray-900">
+                                    Способи оплати
+                                </h2>
+                                <Link
+                                    href="/admin/settings/payments"
+                                    className="inline-flex items-center gap-2 text-sm text-teal-600 hover:text-teal-700 font-medium"
+                                >
+                                    Детальні налаштування
+                                    <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+                                </Link>
+                            </div>
 
                             <div className="space-y-4">
                                 {[
@@ -259,9 +270,18 @@ export default function AdminSettingsPage() {
 
                     {activeTab === 'delivery' && (
                         <div className="bg-white rounded-xl shadow-sm p-6 space-y-6">
-                            <h2 className="text-lg font-semibold text-gray-900 pb-4 border-b">
-                                Способи доставки
-                            </h2>
+                            <div className="flex items-center justify-between pb-4 border-b">
+                                <h2 className="text-lg font-semibold text-gray-900">
+                                    Способи доставки
+                                </h2>
+                                <Link
+                                    href="/admin/settings/delivery"
+                                    className="inline-flex items-center gap-2 text-sm text-teal-600 hover:text-teal-700 font-medium"
+                                >
+                                    Детальні налаштування
+                                    <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+                                </Link>
+                            </div>
 
                             <div className="space-y-4">
                                 {[

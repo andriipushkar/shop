@@ -17,6 +17,53 @@ jest.mock('@/lib/cart-context', () => ({
   useCart: () => mockUseCart,
 }));
 
+// Mock useAuth
+const mockUseAuth = {
+  user: null,
+  isAuthenticated: false,
+  isLoading: false,
+  login: jest.fn(),
+  register: jest.fn(),
+  logout: jest.fn(),
+  updateProfile: jest.fn(),
+};
+
+jest.mock('@/lib/auth-context', () => ({
+  useAuth: () => mockUseAuth,
+}));
+
+// Mock useWishlist
+const mockUseWishlist = {
+  items: [],
+  totalItems: 2,
+  addToWishlist: jest.fn(),
+  removeFromWishlist: jest.fn(),
+  isInWishlist: jest.fn().mockReturnValue(false),
+  toggleWishlist: jest.fn(),
+  clearWishlist: jest.fn(),
+};
+
+jest.mock('@/lib/wishlist-context', () => ({
+  useWishlist: () => mockUseWishlist,
+}));
+
+// Mock useComparison
+const mockUseComparison = {
+  items: [],
+  itemCount: 1,
+  maxItems: 4,
+  canAdd: true,
+  addToComparison: jest.fn(),
+  removeFromComparison: jest.fn(),
+  isInComparison: jest.fn().mockReturnValue(false),
+  toggleComparison: jest.fn(),
+  clearComparison: jest.fn(),
+};
+
+jest.mock('@/lib/comparison-context', () => ({
+  useComparison: () => mockUseComparison,
+}));
+
 // Mock next/navigation
 const mockPush = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -128,14 +175,14 @@ describe('Header', () => {
 
     fireEvent.click(menuButton);
 
-    expect(screen.getByText('Особистий кабінет')).toBeInTheDocument();
+    expect(screen.getByText('Увійти / Реєстрація')).toBeInTheDocument();
     expect(screen.getByText('Мої замовлення')).toBeInTheDocument();
     expect(screen.getByText('Список бажань')).toBeInTheDocument();
   });
 
   it('renders navigation links', () => {
     render(<Header />);
-    expect(screen.getByText('Кабінет')).toBeInTheDocument();
+    expect(screen.getByText('Увійти')).toBeInTheDocument();
     expect(screen.getByText('Бажання')).toBeInTheDocument();
   });
 
@@ -232,9 +279,9 @@ describe('Header', () => {
     fireEvent.click(menuButton);
 
     // Menu should be open
-    expect(screen.getByText('Особистий кабінет')).toBeInTheDocument();
+    expect(screen.getByText('Увійти / Реєстрація')).toBeInTheDocument();
 
-    const accountLink = screen.getByText('Особистий кабінет').closest('a');
+    const accountLink = screen.getByText('Увійти / Реєстрація').closest('a');
     await act(async () => {
       fireEvent.click(accountLink!);
     });
@@ -334,8 +381,8 @@ describe('Header', () => {
 
   it('renders account link with correct href', () => {
     render(<Header />);
-    const accountLink = screen.getByText('Кабінет').closest('a');
-    expect(accountLink).toHaveAttribute('href', '/account');
+    const accountLink = screen.getByText('Увійти').closest('a');
+    expect(accountLink).toHaveAttribute('href', '/auth/login');
   });
 
   it('renders wishlist link with correct href', () => {

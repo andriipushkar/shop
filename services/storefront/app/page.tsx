@@ -2,6 +2,7 @@ import { getProducts, getCategories } from "@/lib/api";
 import ProductCard from "@/components/ProductCard";
 import HeroSection from "@/components/HeroSection";
 import PromoSection from "@/components/PromoSection";
+import HomeRecentlyViewed from "@/components/HomeRecentlyViewed";
 import { Suspense } from "react";
 import SearchFilterWrapper from "@/components/SearchFilterWrapper";
 import Link from "next/link";
@@ -145,6 +146,13 @@ export default async function Home({ searchParams }: PageProps) {
           )}
         </div>
       </section>
+
+      {/* Recently Viewed Section */}
+      {showHero && (
+        <Suspense fallback={null}>
+          <HomeRecentlyViewed />
+        </Suspense>
+      )}
 
       {/* Why Choose Us Section */}
       {showHero && (

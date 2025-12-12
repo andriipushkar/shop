@@ -18,6 +18,7 @@ const categories = [
 
 const customerLinks = [
   { href: '/delivery', label: 'Доставка та оплата' },
+  { href: '/tracking', label: 'Відстежити посилку' },
   { href: '/returns', label: 'Повернення товару' },
   { href: '/faq', label: 'Часті питання' },
   { href: '/contact', label: 'Контакти' },

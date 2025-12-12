@@ -4,6 +4,9 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/lib/cart-context';
+import { useAuth } from '@/lib/auth-context';
+import { useWishlist } from '@/lib/wishlist-context';
+import { useComparison } from '@/lib/comparison-context';
 import {
     MagnifyingGlassIcon,
     UserIcon,
@@ -15,6 +18,7 @@ import {
     PhoneIcon,
     TruckIcon,
     SparklesIcon,
+    ScaleIcon,
 } from '@heroicons/react/24/outline';
 
 const categories = [
@@ -78,6 +82,9 @@ const categories = [
 export default function Header() {
     const router = useRouter();
     const { totalItems, totalPrice } = useCart();
+    const { user, isAuthenticated } = useAuth();
+    const { totalItems: wishlistCount } = useWishlist();
+    const { itemCount: comparisonCount } = useComparison();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeMegaMenu, setActiveMegaMenu] = useState<string | null>(null);
@@ -198,11 +205,25 @@ export default function Header() {
                         {/* Right Actions */}
                         <nav className="flex items-center gap-1 sm:gap-2">
                             <Link
-                                href="/account"
+                                href={isAuthenticated ? "/profile" : "/auth/login"}
                                 className="hidden sm:flex flex-col items-center text-gray-600 hover:text-teal-600 transition-colors p-2 rounded-lg hover:bg-teal-50"
                             >
                                 <UserIcon className="w-6 h-6" />
-                                <span className="text-xs mt-1 hidden lg:block">Кабінет</span>
+                                <span className="text-xs mt-1 hidden lg:block">
+                                    {isAuthenticated ? user?.name?.split(' ')[0] || 'Профіль' : 'Увійти'}
+                                </span>
+                            </Link>
+                            <Link
+                                href="/comparison"
+                                className="hidden sm:flex flex-col items-center text-gray-600 hover:text-teal-600 transition-colors p-2 rounded-lg hover:bg-teal-50 relative"
+                            >
+                                <ScaleIcon className="w-6 h-6" />
+                                <span className="text-xs mt-1 hidden lg:block">Порівняти</span>
+                                {comparisonCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                                        {comparisonCount}
+                                    </span>
+                                )}
                             </Link>
                             <Link
                                 href="/wishlist"
@@ -210,6 +231,11 @@ export default function Header() {
                             >
                                 <HeartIcon className="w-6 h-6" />
                                 <span className="text-xs mt-1 hidden lg:block">Бажання</span>
+                                {wishlistCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                                        {wishlistCount}
+                                    </span>
+                                )}
                             </Link>
                             <Link
                                 href="/cart"
@@ -368,12 +394,12 @@ export default function Header() {
 
                         <div className="mt-6 pt-6 border-t border-gray-200 space-y-3">
                             <Link
-                                href="/account"
+                                href={isAuthenticated ? "/profile" : "/auth/login"}
                                 className="flex items-center gap-3 py-3 text-gray-700 hover:text-teal-600 font-medium"
                                 onClick={() => setIsMenuOpen(false)}
                             >
                                 <UserIcon className="w-6 h-6" />
-                                <span>Особистий кабінет</span>
+                                <span>{isAuthenticated ? `${user?.name || 'Профіль'}` : 'Увійти / Реєстрація'}</span>
                             </Link>
                             <Link
                                 href="/orders"
@@ -384,12 +410,38 @@ export default function Header() {
                                 <span>Мої замовлення</span>
                             </Link>
                             <Link
+                                href="/tracking"
+                                className="flex items-center gap-3 py-3 text-gray-700 hover:text-teal-600 font-medium"
+                                onClick={() => setIsMenuOpen(false)}
+                            >
+                                <TruckIcon className="w-6 h-6" />
+                                <span>Відстежити посилку</span>
+                            </Link>
+                            <Link
                                 href="/wishlist"
                                 className="flex items-center gap-3 py-3 text-gray-700 hover:text-teal-600 font-medium"
                                 onClick={() => setIsMenuOpen(false)}
                             >
                                 <HeartIcon className="w-6 h-6" />
                                 <span>Список бажань</span>
+                                {wishlistCount > 0 && (
+                                    <span className="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                                        {wishlistCount}
+                                    </span>
+                                )}
+                            </Link>
+                            <Link
+                                href="/comparison"
+                                className="flex items-center gap-3 py-3 text-gray-700 hover:text-teal-600 font-medium"
+                                onClick={() => setIsMenuOpen(false)}
+                            >
+                                <ScaleIcon className="w-6 h-6" />
+                                <span>Порівняння товарів</span>
+                                {comparisonCount > 0 && (
+                                    <span className="ml-auto bg-primary-600 text-white text-xs px-2 py-0.5 rounded-full">
+                                        {comparisonCount}
+                                    </span>
+                                )}
                             </Link>
                             <Link
                                 href="/sale"

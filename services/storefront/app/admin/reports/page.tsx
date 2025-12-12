@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
     DocumentArrowDownIcon,
     CalendarIcon,
@@ -12,6 +13,8 @@ import {
     ShoppingBagIcon,
     ClockIcon,
     CheckCircleIcon,
+    ArrowTopRightOnSquareIcon,
+    CreditCardIcon,
 } from '@heroicons/react/24/outline';
 
 type ReportType = 'sales' | 'products' | 'customers' | 'orders' | 'inventory';
@@ -110,6 +113,62 @@ export default function AdminReportsPage() {
                     <ClockIcon className="w-5 h-5" />
                     Запланувати звіт
                 </button>
+            </div>
+
+            {/* Quick links to detailed reports */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Link
+                    href="/admin/reports/sales"
+                    className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow group"
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center">
+                            <CurrencyDollarIcon className="w-5 h-5 text-teal-600" />
+                        </div>
+                        <ArrowTopRightOnSquareIcon className="w-5 h-5 text-gray-400 group-hover:text-teal-600" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900 mt-3">Звіт по продажах</h3>
+                    <p className="text-sm text-gray-500">Детальна аналітика продажів</p>
+                </Link>
+                <Link
+                    href="/admin/reports/payments"
+                    className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow group"
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <CreditCardIcon className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <ArrowTopRightOnSquareIcon className="w-5 h-5 text-gray-400 group-hover:text-teal-600" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900 mt-3">Звіт по платежах</h3>
+                    <p className="text-sm text-gray-500">Транзакції та комісії</p>
+                </Link>
+                <Link
+                    href="/admin/reports/customers"
+                    className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow group"
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <UsersIcon className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <ArrowTopRightOnSquareIcon className="w-5 h-5 text-gray-400 group-hover:text-teal-600" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900 mt-3">Аналітика клієнтів</h3>
+                    <p className="text-sm text-gray-500">Когорти та сегменти</p>
+                </Link>
+                <Link
+                    href="/admin/analytics"
+                    className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow group"
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                            <ChartBarIcon className="w-5 h-5 text-amber-600" />
+                        </div>
+                        <ArrowTopRightOnSquareIcon className="w-5 h-5 text-gray-400 group-hover:text-teal-600" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900 mt-3">Загальна аналітика</h3>
+                    <p className="text-sm text-gray-500">Дашборд метрик</p>
+                </Link>
             </div>
 
             <div className="grid lg:grid-cols-3 gap-6">
