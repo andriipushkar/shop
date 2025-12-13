@@ -121,7 +121,7 @@ export default function OfflineIndicator() {
           <ArrowPathIcon className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
           <div>
             <p className="font-semibold text-sm">
-              {syncing ? 'Синхронізація...' : 'З'єднання відновлено'}
+              {syncing ? 'Синхронізація...' : "З'єднання відновлено"}
             </p>
             {queueCount > 0 && !syncing && (
               <p className="text-xs text-green-700">

@@ -31,6 +31,10 @@ class MockFile implements File {
     return Promise.resolve(new ArrayBuffer(this.size));
   }
 
+  bytes(): Promise<Uint8Array> {
+    return Promise.resolve(new Uint8Array(this.size));
+  }
+
   slice(): Blob {
     return new Blob();
   }

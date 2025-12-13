@@ -103,36 +103,36 @@ describe('i18n', () => {
 
     describe('createTranslator', () => {
         it('translates simple keys', () => {
-            const t = createTranslator(translations.uk as Record<string, unknown>);
+            const t = createTranslator(translations.uk as any);
             expect(t('common.loading')).toBe('Завантаження...');
         });
 
         it('translates nested keys', () => {
-            const t = createTranslator(translations.en as Record<string, unknown>);
+            const t = createTranslator(translations.en as any);
             expect(t('cart.empty')).toBe('Your cart is empty');
         });
 
         it('interpolates parameters', () => {
-            const t = createTranslator(translations.uk as Record<string, unknown>);
+            const t = createTranslator(translations.uk as any);
             expect(t('cart.itemsCount', { count: 5 })).toBe('5 товарів');
         });
 
         it('returns key when translation not found', () => {
             const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-            const t = createTranslator(translations.uk as Record<string, unknown>);
+            const t = createTranslator(translations.uk as any);
             expect(t('nonexistent.key')).toBe('nonexistent.key');
             consoleSpy.mockRestore();
         });
 
         it('uses fallback translations', () => {
             const partial = { common: { test: 'Test' } };
-            const fallback = translations.uk as Record<string, unknown>;
+            const fallback = translations.uk as any;
             const t = createTranslator(partial, fallback);
             expect(t('common.loading')).toBe('Завантаження...');
         });
 
         it('Polish translations are complete', () => {
-            const t = createTranslator(translations.pl as Record<string, unknown>);
+            const t = createTranslator(translations.pl as any);
             expect(t('common.loading')).toBe('Ładowanie...');
             expect(t('cart.title')).toBe('Koszyk');
             expect(t('checkout.title')).toBe('Składanie zamówienia');
@@ -467,7 +467,7 @@ describe('i18n', () => {
         });
 
         it('has order status translations', () => {
-            const orderStatuses = pl.order as Record<string, Record<string, string>>;
+            const orderStatuses = pl.order as unknown as Record<string, Record<string, string>>;
             expect(orderStatuses.statuses.pending).toBe('Oczekujące');
             expect(orderStatuses.statuses.shipped).toBe('Wysłane');
             expect(orderStatuses.statuses.delivered).toBe('Dostarczone');

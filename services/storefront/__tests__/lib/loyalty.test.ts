@@ -206,7 +206,7 @@ describe('Loyalty System', () => {
 
     it('should return 100 for completed tier', () => {
       const bronzeTier = LOYALTY_TIERS.find(t => t.id === 'bronze')!;
-      const progress = getTierProgress(bronzeTier.maxPoints, bronzeTier);
+      const progress = getTierProgress(bronzeTier.maxPoints ?? 0, bronzeTier);
 
       expect(progress).toBeCloseTo(100, 0);
     });
