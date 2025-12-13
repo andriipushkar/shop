@@ -3,6 +3,8 @@
  * Supports multiple providers: SMTP, SendGrid, Mailgun
  */
 
+import { logger } from './logger';
+
 // Types
 export interface EmailOptions {
   to: string;
@@ -51,11 +53,11 @@ const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
 
 // Email sending function (mock for development)
 async function sendEmailMock(options: EmailOptions): Promise<EmailResult> {
-  console.log('📧 [Mock Email] Sending email:');
-  console.log('  To:', options.to);
-  console.log('  Subject:', options.subject);
-  console.log('  From:', options.from || EMAIL_FROM);
-  console.log('---');
+  logger.debug('Sending mock email', {
+    to: options.to,
+    subject: options.subject,
+    from: options.from || EMAIL_FROM,
+  });
 
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 500));
@@ -99,7 +101,7 @@ async function sendEmailSendGrid(options: EmailOptions): Promise<EmailResult> {
       messageId: response.headers.get('X-Message-Id') || undefined,
     };
   } catch (error) {
-    console.error('SendGrid error:', error);
+    logger.error('SendGrid error', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

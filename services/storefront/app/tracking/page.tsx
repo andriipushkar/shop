@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { trackShipment, NovaPoshtaTrackingDocument } from '@/lib/nova-poshta';
+import { logger } from '@/lib/logger';
 import {
   MagnifyingGlassIcon,
   TruckIcon,
@@ -80,7 +81,7 @@ export default function TrackingPage() {
       }
     } catch (err) {
       setError('Помилка при відстеженні. Спробуйте пізніше.');
-      console.error('Tracking error:', err);
+      logger.error('Tracking error', err);
     } finally {
       setIsLoading(false);
     }

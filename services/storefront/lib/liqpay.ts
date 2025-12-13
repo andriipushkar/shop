@@ -4,6 +4,7 @@
  */
 
 import crypto from 'crypto';
+import { paymentLogger } from './logger';
 
 // Types
 export interface LiqPayPaymentData {
@@ -130,7 +131,7 @@ function generateSignature(data: string): string {
   if (typeof window !== 'undefined') {
     // Client-side: use Web Crypto API (async) - for now use simple hash
     // In production, signature should be generated server-side
-    console.warn('Signature generation should be done server-side');
+    paymentLogger.warn('Signature generation should be done server-side');
     return '';
   }
   const str = PRIVATE_KEY + data + PRIVATE_KEY;
@@ -196,7 +197,7 @@ export function parseCallbackData(data: string): LiqPayCallbackData | null {
     const decoded = decodeBase64(data);
     return JSON.parse(decoded) as LiqPayCallbackData;
   } catch (error) {
-    console.error('Failed to parse LiqPay callback data:', error);
+    paymentLogger.error('Failed to parse LiqPay callback data', error);
     return null;
   }
 }
@@ -270,9 +271,16 @@ export function getCheckoutUrl(): string {
 export const PAYMENT_METHODS = [
   {
     id: 'liqpay',
-    name: 'Картка онлайн',
+    name: 'Картка онлайн (LiqPay)',
     description: 'Visa, Mastercard, Google Pay, Apple Pay',
     icon: '💳',
+    enabled: true,
+  },
+  {
+    id: 'monobank',
+    name: 'Monobank',
+    description: 'Оплата через Monobank Acquiring',
+    icon: '🏦',
     enabled: true,
   },
   {

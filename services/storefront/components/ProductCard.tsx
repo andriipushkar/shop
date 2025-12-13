@@ -6,8 +6,9 @@ import { useCart } from '@/lib/cart-context';
 import { useWishlist } from '@/lib/wishlist-context';
 import { useComparison } from '@/lib/comparison-context';
 import { useRecentlyViewed } from '@/lib/recently-viewed-context';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
     ShoppingCartIcon,
     HeartIcon,
@@ -20,9 +21,11 @@ import { HeartIcon as HeartSolidIcon, StarIcon as StarSolidIcon } from '@heroico
 interface ProductCardProps {
     product: Product | MockProduct;
     showQuickView?: boolean;
+    /** Set to true for above-the-fold images (first 4-8 products) to improve LCP */
+    priority?: boolean;
 }
 
-export default function ProductCard({ product, showQuickView = true }: ProductCardProps) {
+function ProductCard({ product, showQuickView = true, priority = false }: ProductCardProps) {
     const { addToCart } = useCart();
     const { isInWishlist, toggleWishlist } = useWishlist();
     const { isInComparison, toggleComparison, canAdd } = useComparison();
@@ -120,6 +123,7 @@ export default function ProductCard({ product, showQuickView = true }: ProductCa
                                 : 'bg-white/90 text-gray-600 hover:bg-red-50 hover:text-red-500'
                         } shadow-md`}
                         title={isWishlisted ? 'Видалити з бажань' : 'Додати до бажань'}
+                        aria-label={isWishlisted ? 'Видалити з бажань' : 'Додати до бажань'}
                     >
                         {isWishlisted ? (
                             <HeartSolidIcon className="w-5 h-5" />
@@ -137,6 +141,7 @@ export default function ProductCard({ product, showQuickView = true }: ProductCa
                                     : 'bg-white/90 text-gray-600 hover:bg-teal-50 hover:text-teal-600'
                         } shadow-md`}
                         title={isCompared ? 'Видалити з порівняння' : canAdd ? 'Додати до порівняння' : 'Максимум 4 товари'}
+                        aria-label={isCompared ? 'Видалити з порівняння' : canAdd ? 'Додати до порівняння' : 'Максимум 4 товари'}
                     >
                         <ScaleIcon className="w-5 h-5" />
                     </button>
@@ -144,6 +149,7 @@ export default function ProductCard({ product, showQuickView = true }: ProductCa
                         <button
                             className="w-9 h-9 bg-white/90 rounded-full flex items-center justify-center text-gray-600 hover:bg-teal-50 hover:text-teal-600 shadow-md transition-all duration-200"
                             title="Швидкий перегляд"
+                            aria-label="Швидкий перегляд товару"
                         >
                             <EyeIcon className="w-5 h-5" />
                         </button>
@@ -153,11 +159,15 @@ export default function ProductCard({ product, showQuickView = true }: ProductCa
                 {/* Image Container */}
                 <div className="aspect-square bg-gray-50 flex items-center justify-center relative overflow-hidden">
                     {hasImage ? (
-                        <img
-                            src={product.image_url}
-                            alt={product.name}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        <Image
+                            src={product.image_url!}
+                            alt={`${product.name} - купити в TechShop за ${product.price.toLocaleString('uk-UA')} грн`}
+                            fill
+                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                            className="object-cover group-hover:scale-110 transition-transform duration-500"
                             onError={() => setImageError(true)}
+                            priority={priority}
+                            loading={priority ? undefined : 'lazy'}
                         />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
@@ -288,3 +298,12 @@ export default function ProductCard({ product, showQuickView = true }: ProductCa
         </Link>
     );
 }
+
+// Memoize to prevent unnecessary re-renders when parent updates
+export default memo(ProductCard, (prevProps, nextProps) => {
+    return prevProps.product.id === nextProps.product.id &&
+           prevProps.product.price === nextProps.product.price &&
+           prevProps.product.stock === nextProps.product.stock &&
+           prevProps.showQuickView === nextProps.showQuickView &&
+           prevProps.priority === nextProps.priority;
+});

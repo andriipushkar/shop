@@ -2,12 +2,15 @@
 
 import { useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/lib/cart-context';
+import { useLoyalty } from '@/lib/loyalty-context';
 import { Order } from '@/lib/api';
 import NovaPoshtaSelector, { DeliverySelection } from '@/components/NovaPoshtaSelector';
 import PaymentSelector, { PaymentSelection, LiqPayForm } from '@/components/PaymentSelector';
 import { sendOrderConfirmation } from '@/lib/email';
+import { logger } from '@/lib/logger';
 import {
     ArrowLeftIcon,
     TruckIcon,
@@ -18,6 +21,8 @@ import {
     UserIcon,
     EnvelopeIcon,
     TagIcon,
+    SparklesIcon,
+    GiftIcon,
 } from '@heroicons/react/24/outline';
 
 function generateIdempotencyKey(userId: number, productId: string): string {
@@ -29,12 +34,20 @@ function generateIdempotencyKey(userId: number, productId: string): string {
 export default function CheckoutPage() {
     const router = useRouter();
     const { items, clearCart, totalPrice, userId, isLoading } = useCart();
+    const { account, tierConfig, earnPoints, redeemPoints } = useLoyalty();
+    const currentPoints = account?.currentPoints || 0;
+    const currentTier = account?.tier || 'bronze';
+    const spendPoints = redeemPoints;
 
     // Form state
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [phone, setPhone] = useState('');
     const [email, setEmail] = useState('');
+
+    // Loyalty state
+    const [usePoints, setUsePoints] = useState(false);
+    const [pointsToUse, setPointsToUse] = useState(0);
 
     // Delivery - using new NovaPoshtaSelector
     const [deliverySelection, setDeliverySelection] = useState<DeliverySelection>({
@@ -72,7 +85,14 @@ export default function CheckoutPage() {
     const deliveryPrice = deliverySelection.price;
     const discountAmount = totalPrice * (promoDiscount / 100);
     const commission = paymentSelection.commission;
-    const finalPrice = totalPrice - discountAmount + deliveryPrice + commission;
+    // Loyalty discount: 1 point = 1 UAH
+    const loyaltyDiscount = usePoints ? Math.min(pointsToUse, currentPoints, totalPrice - discountAmount) : 0;
+    const finalPrice = totalPrice - discountAmount - loyaltyDiscount + deliveryPrice + commission;
+    // Points to earn: 1 UAH = 0.1 point * tier multiplier
+    const tierMultiplier = tierConfig?.[currentTier]?.pointsMultiplier || 1;
+    const pointsToEarn = Math.floor((totalPrice - discountAmount - loyaltyDiscount) * 0.1 * tierMultiplier);
+    // Max points that can be used (can't exceed order total after promo)
+    const maxPointsToUse = Math.min(currentPoints, Math.floor(totalPrice - discountAmount));
 
     const handleDeliveryChange = useCallback((selection: DeliverySelection) => {
         setDeliverySelection(selection);
@@ -234,6 +254,16 @@ export default function CheckoutPage() {
                 });
             }
 
+            // Handle loyalty points
+            const orderIdStr = createdOrders.map(o => o.id).join(', ');
+            if (loyaltyDiscount > 0) {
+                spendPoints(loyaltyDiscount, `Замовлення ${orderIdStr}`);
+            }
+            if (pointsToEarn > 0) {
+                // earnPoints(orderId, orderAmount, description)
+                earnPoints(orderIdStr, finalPrice, `Замовлення ${orderIdStr}`);
+            }
+
             // Send order confirmation email
             if (email.trim()) {
                 try {
@@ -255,7 +285,7 @@ export default function CheckoutPage() {
                         paymentMethod: getPaymentMethodName(),
                     });
                 } catch (emailError) {
-                    console.error('Failed to send confirmation email:', emailError);
+                    logger.error('Failed to send confirmation email', emailError);
                 }
             }
 
@@ -564,9 +594,15 @@ export default function CheckoutPage() {
                                 <div className="space-y-4 mb-6">
                                     {items.map((item) => (
                                         <div key={item.product.id} className="flex gap-4">
-                                            <div className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
+                                            <div className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0 relative">
                                                 {item.product.image_url ? (
-                                                    <img src={item.product.image_url} alt={item.product.name} className="w-full h-full object-cover" />
+                                                    <Image
+                                                        src={item.product.image_url}
+                                                        alt={item.product.name}
+                                                        fill
+                                                        sizes="64px"
+                                                        className="object-cover"
+                                                    />
                                                 ) : (
                                                     <span className="text-2xl opacity-30">📦</span>
                                                 )}
@@ -627,6 +663,71 @@ export default function CheckoutPage() {
                                     {promoSuccess && <p className="text-teal-600 text-sm mt-2">{promoSuccess}</p>}
                                 </div>
 
+                                {/* Loyalty Points */}
+                                {currentPoints > 0 && (
+                                    <div className="mb-6 pb-6 border-b">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <SparklesIcon className="w-5 h-5 text-amber-500" />
+                                                <span className="font-medium text-gray-900">Бонусні бали</span>
+                                            </div>
+                                            <span className="text-sm text-gray-600">
+                                                Доступно: <span className="font-semibold text-amber-600">{currentPoints}</span> балів
+                                            </span>
+                                        </div>
+
+                                        <label className="flex items-center gap-3 cursor-pointer mb-3">
+                                            <input
+                                                type="checkbox"
+                                                checked={usePoints}
+                                                onChange={(e) => {
+                                                    setUsePoints(e.target.checked);
+                                                    if (e.target.checked) {
+                                                        setPointsToUse(maxPointsToUse);
+                                                    } else {
+                                                        setPointsToUse(0);
+                                                    }
+                                                }}
+                                                className="w-5 h-5 rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+                                            />
+                                            <span className="text-sm text-gray-700">
+                                                Використати бали (1 бал = 1 грн)
+                                            </span>
+                                        </label>
+
+                                        {usePoints && (
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max={maxPointsToUse}
+                                                    value={pointsToUse}
+                                                    onChange={(e) => setPointsToUse(Number(e.target.value))}
+                                                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                                                />
+                                                <span className="text-sm font-semibold text-amber-600 min-w-[60px] text-right">
+                                                    -{pointsToUse} грн
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Points to Earn */}
+                                {pointsToEarn > 0 && (
+                                    <div className="mb-6 pb-6 border-b bg-amber-50 -mx-6 px-6 py-4">
+                                        <div className="flex items-center gap-2 text-amber-700">
+                                            <GiftIcon className="w-5 h-5" />
+                                            <span className="text-sm">
+                                                За це замовлення ви отримаєте <span className="font-bold">+{pointsToEarn}</span> балів
+                                                {tierMultiplier > 1 && (
+                                                    <span className="text-xs ml-1">(x{tierMultiplier} {currentTier})</span>
+                                                )}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Totals */}
                                 <div className="space-y-3 mb-6">
                                     <div className="flex justify-between text-gray-600">
@@ -637,6 +738,12 @@ export default function CheckoutPage() {
                                         <div className="flex justify-between text-teal-600">
                                             <span>Знижка ({promoDiscount}%)</span>
                                             <span>-{discountAmount.toFixed(0)} грн</span>
+                                        </div>
+                                    )}
+                                    {loyaltyDiscount > 0 && (
+                                        <div className="flex justify-between text-amber-600">
+                                            <span>Бонусні бали</span>
+                                            <span>-{loyaltyDiscount.toFixed(0)} грн</span>
                                         </div>
                                     )}
                                     <div className="flex justify-between text-gray-600">

@@ -1,0 +1,205 @@
+# ===========================================
+# .dockerignore for Next.js Application
+# Optimizes Docker build by excluding unnecessary files
+# ===========================================
+
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Next.js
+.next/
+.next/*
+out/
+dist/
+build/
+
+# Testing
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+__tests__/
+*.test.ts
+*.test.tsx
+*.test.js
+*.test.jsx
+*.spec.ts
+*.spec.tsx
+*.spec.js
+*.spec.jsx
+e2e/
+playwright.config.ts
+jest.config.js
+jest.setup.js
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+*.bak
+*~
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+
+# Environment files (these should be passed via docker-compose or build args)
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.env*.local
+
+# Version Control
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+.docker/
+
+# Documentation
+*.md
+README*
+CHANGELOG*
+LICENSE
+CONTRIBUTING*
+docs/
+documentation/
+
+# CI/CD
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+bitbucket-pipelines.yml
+Jenkinsfile
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Storybook
+.storybook/
+storybook-static/
+*.stories.tsx
+*.stories.ts
+*.stories.jsx
+*.stories.js
+
+# Misc
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+.stylelintcache
+.prettierignore
+.editorconfig
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Package manager specific files (keep package.json and package-lock.json)
+yarn.lock
+pnpm-lock.yaml
+.pnpm-store/
+
+# Sentry
+.sentryclirc
+
+# Vercel
+.vercel
+
+# Bundle analyzer
+.next/analyze/
+
+# TypeScript cache
+*.tsbuildinfo
+next-env.d.ts
+
+# PWA
+**/public/workbox-*.js
+**/public/sw.js
+**/public/worker-*.js
+
+# Certificates
+*.pem
+*.key
+*.crt
+ssl/
+certs/
+
+# Backup files
+*.backup
+*.old
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*

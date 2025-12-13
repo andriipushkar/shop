@@ -1,104 +1,152 @@
 {
-    "name": "TechShop - Інтернет-магазин електроніки",
-    "short_name": "TechShop",
-    "description": "Найкращі ціни на смартфони, ноутбуки та гаджети",
-    "start_url": "/",
-    "display": "standalone",
-    "background_color": "#ffffff",
-    "theme_color": "#0d9488",
-    "orientation": "portrait-primary",
-    "scope": "/",
-    "lang": "uk",
-    "icons": [
+  "name": "TechShop - Інтернет-магазин електроніки",
+  "short_name": "TechShop",
+  "description": "Найкращі товари з доставкою по всій Україні. Електроніка, смартфони, ноутбуки, аксесуари та багато іншого.",
+  "start_url": "/?utm_source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0d9488",
+  "background_color": "#ffffff",
+  "lang": "uk-UA",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/home-mobile.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Головна сторінка TechShop"
+    },
+    {
+      "src": "/screenshots/catalog-mobile.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Каталог товарів"
+    },
+    {
+      "src": "/screenshots/home-desktop.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Головна сторінка TechShop (Desktop)"
+    }
+  ],
+  "categories": ["shopping", "business"],
+  "shortcuts": [
+    {
+      "name": "Каталог",
+      "short_name": "Каталог",
+      "description": "Переглянути всі товари",
+      "url": "/catalog?utm_source=pwa_shortcut",
+      "icons": [
         {
-            "src": "/icons/icon-72x72.png",
-            "sizes": "72x72",
-            "type": "image/png",
-            "purpose": "maskable any"
-        },
-        {
-            "src": "/icons/icon-96x96.png",
-            "sizes": "96x96",
-            "type": "image/png",
-            "purpose": "maskable any"
-        },
-        {
-            "src": "/icons/icon-128x128.png",
-            "sizes": "128x128",
-            "type": "image/png",
-            "purpose": "maskable any"
-        },
-        {
-            "src": "/icons/icon-144x144.png",
-            "sizes": "144x144",
-            "type": "image/png",
-            "purpose": "maskable any"
-        },
-        {
-            "src": "/icons/icon-152x152.png",
-            "sizes": "152x152",
-            "type": "image/png",
-            "purpose": "maskable any"
-        },
-        {
-            "src": "/icons/icon-192x192.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "maskable any"
-        },
-        {
-            "src": "/icons/icon-384x384.png",
-            "sizes": "384x384",
-            "type": "image/png",
-            "purpose": "maskable any"
-        },
-        {
-            "src": "/icons/icon-512x512.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "maskable any"
+          "src": "/icons/shortcut-catalog.png",
+          "sizes": "192x192",
+          "type": "image/png"
         }
-    ],
-    "categories": ["shopping", "electronics"],
-    "screenshots": [
+      ]
+    },
+    {
+      "name": "Кошик",
+      "short_name": "Кошик",
+      "description": "Переглянути кошик",
+      "url": "/cart?utm_source=pwa_shortcut",
+      "icons": [
         {
-            "src": "/screenshots/home.png",
-            "sizes": "1280x720",
-            "type": "image/png",
-            "form_factor": "wide",
-            "label": "Головна сторінка TechShop"
-        },
-        {
-            "src": "/screenshots/mobile.png",
-            "sizes": "750x1334",
-            "type": "image/png",
-            "form_factor": "narrow",
-            "label": "Мобільна версія"
+          "src": "/icons/shortcut-cart.png",
+          "sizes": "192x192",
+          "type": "image/png"
         }
-    ],
-    "shortcuts": [
+      ]
+    },
+    {
+      "name": "Акції",
+      "short_name": "Акції",
+      "description": "Спеціальні пропозиції",
+      "url": "/promotions?utm_source=pwa_shortcut",
+      "icons": [
         {
-            "name": "Каталог",
-            "short_name": "Каталог",
-            "description": "Переглянути каталог товарів",
-            "url": "/catalog",
-            "icons": [{ "src": "/icons/catalog.png", "sizes": "96x96" }]
-        },
-        {
-            "name": "Кошик",
-            "short_name": "Кошик",
-            "description": "Переглянути кошик",
-            "url": "/cart",
-            "icons": [{ "src": "/icons/cart.png", "sizes": "96x96" }]
-        },
-        {
-            "name": "Відстеження",
-            "short_name": "Трекінг",
-            "description": "Відстежити замовлення",
-            "url": "/tracking",
-            "icons": [{ "src": "/icons/tracking.png", "sizes": "96x96" }]
+          "src": "/icons/shortcut-promo.png",
+          "sizes": "192x192",
+          "type": "image/png"
         }
-    ],
-    "related_applications": [],
-    "prefer_related_applications": false
+      ]
+    },
+    {
+      "name": "Профіль",
+      "short_name": "Профіль",
+      "description": "Мій акаунт",
+      "url": "/profile?utm_source=pwa_shortcut",
+      "icons": [
+        {
+          "src": "/icons/shortcut-profile.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false,
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }

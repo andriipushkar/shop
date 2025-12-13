@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiLogger } from '@/lib/logger';
 
 const OMS_URL = process.env.OMS_SERVICE_URL || 'http://oms:8081';
 
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({ success: true });
     } catch (error) {
-        console.error('Error using promo:', error);
+        apiLogger.error('Error using promo:', error);
         return NextResponse.json({ success: false }, { status: 500 });
     }
 }

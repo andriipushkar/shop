@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useCart } from '@/lib/cart-context';
 import {
     TrashIcon,
@@ -84,12 +85,14 @@ export default function CartPage() {
                                     >
                                         {/* Product Image */}
                                         <Link href={`/product/${item.product.id}`} className="flex-shrink-0">
-                                            <div className="w-24 h-24 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden">
+                                            <div className="w-24 h-24 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden relative">
                                                 {item.product.image_url ? (
-                                                    <img
+                                                    <Image
                                                         src={item.product.image_url}
                                                         alt={item.product.name}
-                                                        className="w-full h-full object-cover"
+                                                        fill
+                                                        sizes="96px"
+                                                        className="object-cover"
                                                     />
                                                 ) : (
                                                     <span className="text-4xl opacity-30">📦</span>

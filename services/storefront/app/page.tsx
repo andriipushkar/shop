@@ -1,3 +1,4 @@
+import { Metadata } from "next";
 import { getProducts, getCategories } from "@/lib/api";
 import ProductCard from "@/components/ProductCard";
 import HeroSection from "@/components/HeroSection";
@@ -8,8 +9,58 @@ import SearchFilterWrapper from "@/components/SearchFilterWrapper";
 import Link from "next/link";
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import { products as mockProducts, categories as mockCategories, getRootCategories } from "@/lib/mock-data";
+import { ItemListJsonLd } from "@/components/ProductJsonLd";
 
-export const dynamic = 'force-dynamic';
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://techshop.ua';
+
+// Homepage metadata for SEO
+export const metadata: Metadata = {
+  title: "TechShop - Інтернет-магазин електроніки в Україні",
+  description: "Купити смартфони, ноутбуки, планшети та електроніку в TechShop. ⭐ Офіційна гарантія ✓ Доставка по всій Україні ✓ Найкращі ціни ✓ 5000+ товарів",
+  keywords: [
+    "інтернет-магазин",
+    "електроніка",
+    "смартфони",
+    "ноутбуки",
+    "планшети",
+    "техніка",
+    "Україна",
+    "купити",
+    "TechShop",
+  ],
+  alternates: {
+    canonical: BASE_URL,
+    languages: {
+      'uk-UA': BASE_URL,
+      'en-US': `${BASE_URL}/en`,
+    },
+  },
+  openGraph: {
+    title: "TechShop - Інтернет-магазин електроніки",
+    description: "Купити смартфони, ноутбуки, планшети та електроніку з доставкою по Україні. Офіційна гарантія, найкращі ціни.",
+    url: BASE_URL,
+    siteName: "TechShop",
+    locale: "uk_UA",
+    type: "website",
+    images: [
+      {
+        url: `${BASE_URL}/api/og?type=default&title=TechShop&subtitle=Інтернет-магазин електроніки`,
+        width: 1200,
+        height: 630,
+        alt: "TechShop - Інтернет-магазин електроніки",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TechShop - Інтернет-магазин електроніки",
+    description: "Купити електроніку з доставкою по Україні",
+    images: [`${BASE_URL}/api/og?type=default&title=TechShop&subtitle=Інтернет-магазин електроніки`],
+  },
+};
+
+// Use ISR instead of force-dynamic for better performance
+export const revalidate = 60; // Revalidate every 60 seconds
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -66,6 +117,25 @@ export default async function Home({ searchParams }: PageProps) {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {/* SEO: H1 heading (visually hidden but accessible) */}
+      <h1 className="sr-only">TechShop - Інтернет-магазин електроніки в Україні</h1>
+
+      {/* ItemList JSON-LD for product listing */}
+      {products.length > 0 && (
+        <ItemListJsonLd
+          name="Популярні товари TechShop"
+          description="Найпопулярніші товари електроніки в інтернет-магазині TechShop"
+          products={products.slice(0, 20).map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            image_url: p.image_url,
+            rating: (p as unknown as { rating?: number }).rating,
+          }))}
+          url="/"
+        />
+      )}
+
       {/* Hero Section - only show on main page without filters */}
       {showHero && <HeroSection />}
 
@@ -129,8 +199,12 @@ export default async function Home({ searchParams }: PageProps) {
           ) : (
             <Suspense fallback={<ProductsSkeleton />}>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {products.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                {products.map((product, index) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    priority={index < 8} // Prioritize first 8 products for LCP
+                  />
                 ))}
               </div>
             </Suspense>

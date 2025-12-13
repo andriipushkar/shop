@@ -15,6 +15,7 @@ import {
   CheckIcon,
   LockClosedIcon,
   ShieldCheckIcon,
+  BuildingLibraryIcon,
 } from '@heroicons/react/24/outline';
 
 export interface PaymentSelection {
@@ -52,6 +53,8 @@ export default function PaymentSelector({
     switch (methodId) {
       case 'liqpay':
         return <CreditCardIcon className="w-6 h-6" />;
+      case 'monobank':
+        return <BuildingLibraryIcon className="w-6 h-6" />;
       case 'cash':
         return <BanknotesIcon className="w-6 h-6" />;
       case 'cod':
@@ -65,6 +68,8 @@ export default function PaymentSelector({
     switch (methodId) {
       case 'liqpay':
         return 'text-green-600';
+      case 'monobank':
+        return 'text-black';
       case 'cash':
         return 'text-yellow-600';
       case 'cod':
@@ -119,6 +124,12 @@ export default function PaymentSelector({
                       <span className="text-xs text-gray-400">Google Pay, Apple Pay</span>
                     </div>
                   )}
+                  {method.id === 'monobank' && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs bg-black text-white px-2 py-0.5 rounded">mono</span>
+                      <span className="text-xs text-gray-400">Оплата частинами</span>
+                    </div>
+                  )}
                 </div>
               </button>
             );
@@ -140,6 +151,26 @@ export default function PaymentSelector({
               <div className="flex items-center gap-2 mt-2">
                 <LockClosedIcon className="w-4 h-4 text-green-600" />
                 <span className="text-xs text-green-600">SSL шифрування 256-bit</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Monobank Notice */}
+      {selectedMethod === 'monobank' && (
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+          <div className="flex items-start gap-3">
+            <BuildingLibraryIcon className="w-6 h-6 text-gray-800 flex-shrink-0" />
+            <div>
+              <h4 className="font-medium text-gray-900">Monobank Acquiring</h4>
+              <p className="text-sm text-gray-700 mt-1">
+                Безпечна оплата через Monobank. Підтримується оплата частинами
+                до 25 платежів.
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <LockClosedIcon className="w-4 h-4 text-gray-600" />
+                <span className="text-xs text-gray-600">PCI DSS сертифікація</span>
               </div>
             </div>
           </div>

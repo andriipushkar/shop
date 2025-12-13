@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { logger } from '@/lib/logger';
 import {
     ArrowLeftIcon,
     PlusIcon,
@@ -149,7 +150,7 @@ export default function NewReceiptPage() {
             totalQuantity,
             totalValue,
         };
-        console.log('Receipt:', receipt);
+        logger.info('Receipt created', { receipt });
         alert(`Приймання ${status === 'draft' ? 'збережено як чернетку' : 'проведено'}`);
     };
 

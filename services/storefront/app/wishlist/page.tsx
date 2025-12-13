@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useCart } from '@/lib/cart-context';
 import { useWishlist } from '@/lib/wishlist-context';
 import { useAuth } from '@/lib/auth-context';
@@ -176,10 +177,12 @@ export default function WishlistPage() {
                                     <div className="relative aspect-square bg-gray-100">
                                         <Link href={`/product/${item.productId}`}>
                                             {item.image ? (
-                                                <img
+                                                <Image
                                                     src={item.image}
                                                     alt={item.name}
-                                                    className="w-full h-full object-cover"
+                                                    fill
+                                                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                                                    className="object-cover"
                                                 />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center">

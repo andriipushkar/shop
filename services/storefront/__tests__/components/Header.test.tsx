@@ -2,6 +2,28 @@ import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import Header from '@/components/Header';
 
+// Mock I18n
+jest.mock('@/lib/i18n/i18n-context', () => {
+  const React = require('react');
+  const mockI18nContext = {
+    locale: 'uk',
+    setLocale: jest.fn(),
+    t: (key: string) => key,
+    config: {
+      locale: 'uk',
+      name: 'Українська',
+      flag: '🇺🇦',
+      currency: 'UAH',
+      dateFormat: 'dd.MM.yyyy',
+      numberFormat: 'uk-UA',
+    },
+  };
+  return {
+    useI18n: () => mockI18nContext,
+    I18nContext: React.createContext(mockI18nContext),
+  };
+});
+
 // Mock useCart
 const mockUseCart = {
   totalItems: 3,
@@ -71,6 +93,7 @@ jest.mock('next/navigation', () => ({
     push: mockPush,
   }),
   useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/',
 }));
 
 // Mock next/link to properly handle onClick

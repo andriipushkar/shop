@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { logger } from '@/lib/logger';
 import {
   QrCodeIcon,
   DevicePhoneMobileIcon,
@@ -185,7 +186,7 @@ export default function ScannerPage() {
         setCameraActive(true);
       }
     } catch (err) {
-      console.error('Camera error:', err);
+      logger.error('Camera error', err);
       alert('Не вдалося отримати доступ до камери');
     }
   };
@@ -246,9 +247,7 @@ export default function ScannerPage() {
     localStorage.setItem(storageKey, JSON.stringify(sessionData));
 
     // Діагностика
-    console.log('Created session:', newSessionId);
-    console.log('Storage key:', storageKey);
-    console.log('Saved data:', localStorage.getItem(storageKey));
+    logger.info('Created session', { sessionId: newSessionId, storageKey, savedData: localStorage.getItem(storageKey) });
 
     setSessionId(newSessionId);
     setMode('desktop');
@@ -265,10 +264,7 @@ export default function ScannerPage() {
     const existing = localStorage.getItem(storageKey);
 
     // Діагностика
-    console.log('Looking for session:', inputSessionId.toUpperCase());
-    console.log('Storage key:', storageKey);
-    console.log('Found:', existing);
-    console.log('All localStorage keys:', Object.keys(localStorage));
+    logger.info('Looking for session', { sessionId: inputSessionId.toUpperCase(), storageKey, found: existing, allKeys: Object.keys(localStorage) });
 
     if (!existing) {
       alert('Сесію не знайдено. Перевірте код.');

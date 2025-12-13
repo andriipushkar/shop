@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiLogger } from '@/lib/logger';
 
 const OMS_URL = process.env.OMS_SERVICE_URL || 'http://oms:8081';
 
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
         const order = await res.json();
         return NextResponse.json(order, { status: 201 });
     } catch (error) {
-        console.error('Error creating order:', error);
+        apiLogger.error('Error creating order', error);
         return NextResponse.json(
             { error: 'Failed to create order' },
             { status: 500 }

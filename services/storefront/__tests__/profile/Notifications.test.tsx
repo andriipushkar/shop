@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 
 // Mock next/link
 jest.mock('next/link', () => {
@@ -14,171 +14,112 @@ jest.mock('next/link', () => {
     return MockLink;
 });
 
+// Mock the notification service
+jest.mock('@/lib/notifications/push-service', () => ({
+    notificationService: {
+        getPreferences: jest.fn(() => ({
+            orderStatus: { email: true, push: true, sms: false },
+            priceDrop: { email: false, push: true, sms: false },
+            backInStock: { email: false, push: true, sms: false },
+            promotion: { email: true, push: true, sms: false },
+            quietHours: { enabled: false, start: '22:00', end: '08:00' },
+        })),
+        isPushEnabled: jest.fn(() => Promise.resolve(false)),
+        updateChannelPreferences: jest.fn(() => Promise.resolve()),
+        updateQuietHours: jest.fn(() => Promise.resolve()),
+        requestPushPermission: jest.fn(() => Promise.resolve('granted')),
+        subscribeToPush: jest.fn(() => Promise.resolve(true)),
+        unsubscribeFromPush: jest.fn(() => Promise.resolve(true)),
+    },
+}));
+
+// Mock push-notifications
+jest.mock('@/lib/notifications/push-notifications', () => ({
+    pushNotifications: {
+        isSupported: jest.fn(() => true),
+    },
+}));
+
 import NotificationsPage from '@/app/profile/notifications/page';
 
 describe('NotificationsPage', () => {
     beforeEach(() => {
-        jest.useFakeTimers();
+        jest.clearAllMocks();
     });
 
-    afterEach(() => {
-        jest.useRealTimers();
-    });
-
-    it('renders page header', () => {
+    it('renders page header', async () => {
         render(<NotificationsPage />);
 
-        expect(screen.getByText('Налаштування сповіщень')).toBeInTheDocument();
-        expect(screen.getByText(/Керуйте тим, як ми зв'язуємося з вами/)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Налаштування сповіщень' })).toBeInTheDocument();
     });
 
-    it('displays email notifications section', () => {
+    it('renders breadcrumb navigation', async () => {
         render(<NotificationsPage />);
 
-        expect(screen.getByText('Email-сповіщення')).toBeInTheDocument();
-        expect(screen.getByText('Сповіщення на електронну пошту')).toBeInTheDocument();
+        expect(screen.getByText('Головна')).toBeInTheDocument();
+        expect(screen.getByText('Профіль')).toBeInTheDocument();
     });
 
-    it('displays SMS notifications section', () => {
+    it('displays notification categories after loading', async () => {
         render(<NotificationsPage />);
 
-        expect(screen.getByText('SMS-сповіщення')).toBeInTheDocument();
-        expect(screen.getByText('Сповіщення на телефон')).toBeInTheDocument();
-    });
-
-    it('displays push notifications section', () => {
-        render(<NotificationsPage />);
-
-        expect(screen.getByText('Push-сповіщення')).toBeInTheDocument();
-        expect(screen.getByText('Сповіщення в браузері')).toBeInTheDocument();
-    });
-
-    it('shows email notification options', () => {
-        render(<NotificationsPage />);
-
-        // All email notification types should be present
-        const orderConfirmations = screen.getAllByText('Підтвердження замовлення');
-        expect(orderConfirmations.length).toBeGreaterThan(0);
-
-        const shippingUpdates = screen.getAllByText('Оновлення доставки');
-        expect(shippingUpdates.length).toBeGreaterThan(0);
-    });
-
-    it('shows SMS notification options', () => {
-        render(<NotificationsPage />);
-
-        expect(screen.getByText('SMS з номером замовлення')).toBeInTheDocument();
-        expect(screen.getByText('SMS з номером ТТН')).toBeInTheDocument();
-    });
-
-    it('shows push notification options', () => {
-        render(<NotificationsPage />);
-
-        expect(screen.getByText('Оновлення замовлень')).toBeInTheDocument();
-        expect(screen.getByText('Зниження цін')).toBeInTheDocument();
-    });
-
-    it('shows phone verification status', () => {
-        render(<NotificationsPage />);
-
-        expect(screen.getByText('Телефон підтверджено')).toBeInTheDocument();
-    });
-
-    it('shows SMS warning about charges', () => {
-        render(<NotificationsPage />);
-
-        expect(screen.getByText(/SMS-сповіщення можуть тарифікуватися/)).toBeInTheDocument();
-    });
-
-    it('has toggle buttons for each setting', () => {
-        render(<NotificationsPage />);
-
-        // Toggle buttons have specific classes
-        const toggleButtons = screen.getAllByRole('button').filter(btn =>
-            btn.className.includes('rounded-full') && btn.className.includes('inline-flex')
-        );
-
-        // Should have multiple toggles (email: 5, sms: 4, push: 3 = 12 total)
-        expect(toggleButtons.length).toBeGreaterThanOrEqual(10);
-    });
-
-    it('toggles notification setting when clicked', async () => {
-        render(<NotificationsPage />);
-
-        // Find toggle buttons
-        const getToggleButtons = () => screen.getAllByRole('button').filter(btn =>
-            btn.className.includes('rounded-full') && btn.className.includes('inline-flex')
-        );
-
-        const toggleButtons = getToggleButtons();
-        expect(toggleButtons.length).toBeGreaterThan(0);
-
-        // Count toggles with each class before click
-        const enabledCountBefore = getToggleButtons().filter(btn => btn.className.includes('bg-teal-600')).length;
-
-        // Click a disabled toggle to enable it
-        const disabledToggle = toggleButtons.find(btn => btn.className.includes('bg-gray-200'));
-        if (disabledToggle) {
-            await act(async () => {
-                fireEvent.click(disabledToggle);
-            });
-
-            // After click, there should be one more enabled toggle
-            const enabledCountAfter = getToggleButtons().filter(btn => btn.className.includes('bg-teal-600')).length;
-            expect(enabledCountAfter).toBe(enabledCountBefore + 1);
-        }
-    });
-
-    it('has save changes button', () => {
-        render(<NotificationsPage />);
-
-        expect(screen.getByText('Зберегти зміни')).toBeInTheDocument();
-    });
-
-    it('shows loading state when saving', async () => {
-        render(<NotificationsPage />);
-
-        const saveButton = screen.getByText('Зберегти зміни');
-        await act(async () => {
-            fireEvent.click(saveButton);
+        // Wait for loading to complete
+        await waitFor(() => {
+            expect(screen.getByText('Налаштування за категоріями')).toBeInTheDocument();
         });
 
-        expect(screen.getByText('Збереження...')).toBeInTheDocument();
+        // Check all categories are displayed
+        expect(screen.getByText('Статус замовлення')).toBeInTheDocument();
+        expect(screen.getByText('Зниження ціни')).toBeInTheDocument();
+        expect(screen.getByText('Товар в наявності')).toBeInTheDocument();
+        expect(screen.getByText('Акції та знижки')).toBeInTheDocument();
     });
 
-    it('shows success message after saving', async () => {
+    it('displays push notifications toggle', async () => {
         render(<NotificationsPage />);
 
-        const saveButton = screen.getByText('Зберегти зміни');
-        await act(async () => {
-            fireEvent.click(saveButton);
+        await waitFor(() => {
+            expect(screen.getByText(/Отримуйте миттєві сповіщення/)).toBeInTheDocument();
+        });
+    });
+
+    it('displays quiet hours section', async () => {
+        render(<NotificationsPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Режим "Не турбувати"')).toBeInTheDocument();
         });
 
-        // Wait for save to complete
-        await act(async () => {
-            jest.advanceTimersByTime(1100);
+        expect(screen.getByText(/Вимкніть сповіщення в певний час/)).toBeInTheDocument();
+    });
+
+    it('shows channel options for each category', async () => {
+        render(<NotificationsPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Налаштування за категоріями')).toBeInTheDocument();
         });
 
-        expect(screen.getByText('Налаштування збережено')).toBeInTheDocument();
+        // Email and Push toggles should be present for each category
+        const emailLabels = screen.getAllByText('Email');
+        const pushLabels = screen.getAllByText('Push-сповіщення');
+        const smsLabels = screen.getAllByText('SMS');
+
+        expect(emailLabels.length).toBeGreaterThanOrEqual(4);
+        expect(pushLabels.length).toBeGreaterThanOrEqual(4);
+        expect(smsLabels.length).toBeGreaterThanOrEqual(4);
     });
 
-    it('has breadcrumb navigation', () => {
+    it('displays category descriptions', async () => {
         render(<NotificationsPage />);
 
-        expect(screen.getByText('Головна')).toHaveAttribute('href', '/');
-        expect(screen.getByText('Профіль')).toHaveAttribute('href', '/profile');
-    });
+        await waitFor(() => {
+            expect(screen.getByText('Налаштування за категоріями')).toBeInTheDocument();
+        });
 
-    it('shows promotional email option', () => {
-        render(<NotificationsPage />);
-
-        const promoOptions = screen.getAllByText('Акції та знижки');
-        expect(promoOptions.length).toBeGreaterThan(0);
-    });
-
-    it('shows newsletter option', () => {
-        render(<NotificationsPage />);
-
-        expect(screen.getByText('Розсилка новин')).toBeInTheDocument();
+        expect(screen.getByText(/Сповіщення про зміни статусу ваших замовлень/)).toBeInTheDocument();
+        expect(screen.getByText(/Сповіщення про зниження цін/)).toBeInTheDocument();
+        expect(screen.getByText(/Сповіщення, коли очікуваний товар/)).toBeInTheDocument();
+        expect(screen.getByText(/Сповіщення про нові акції/)).toBeInTheDocument();
     });
 });

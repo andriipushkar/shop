@@ -1,0 +1,160 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: techshop-storefront
+  labels:
+    app: techshop-storefront
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: techshop-storefront
+  template:
+    metadata:
+      labels:
+        app: techshop-storefront
+    spec:
+      containers:
+        - name: storefront
+          image: techshop/storefront:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: NEXT_PUBLIC_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: techshop-config
+                  key: api-url
+            - name: NEXT_PUBLIC_SITE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: techshop-config
+                  key: site-url
+            - name: NEXT_PUBLIC_SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: techshop-secrets
+                  key: sentry-dsn
+            - name: NEXT_PUBLIC_GA_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: techshop-config
+                  key: ga-id
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: techshop-storefront
+spec:
+  selector:
+    app: techshop-storefront
+  ports:
+    - port: 80
+      targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: techshop-storefront
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  tls:
+    - hosts:
+        - techshop.ua
+        - www.techshop.ua
+      secretName: techshop-tls
+  rules:
+    - host: techshop.ua
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: techshop-storefront
+                port:
+                  number: 80
+    - host: www.techshop.ua
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: techshop-storefront
+                port:
+                  number: 80
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: techshop-storefront-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: techshop-storefront
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: techshop-config
+data:
+  api-url: "https://api.techshop.ua/api"
+  site-url: "https://techshop.ua"
+  ga-id: "G-XXXXXXXXXX"
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: techshop-storefront-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: techshop-storefront

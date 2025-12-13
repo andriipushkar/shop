@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiLogger } from '@/lib/logger';
 
 const OMS_URL = process.env.OMS_SERVICE_URL || 'http://oms:8081';
 
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
         const data = await res.json();
         return NextResponse.json({ valid: true, discount: data.discount, code: data.code });
     } catch (error) {
-        console.error('Error validating promo:', error);
+        apiLogger.error('Error validating promo:', error);
         return NextResponse.json({ valid: false, discount: 0, reason: 'server_error' }, { status: 500 });
     }
 }

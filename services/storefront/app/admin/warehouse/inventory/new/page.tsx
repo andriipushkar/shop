@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { logger } from '@/lib/logger';
 import {
     ArrowLeftIcon,
     ClipboardDocumentListIcon,
@@ -191,7 +192,7 @@ export default function NewInventoryPage() {
             totalShortage,
             totalSurplus,
         };
-        console.log('Inventory:', inventory);
+        logger.info('Inventory created', { inventory });
 
         const statusText = {
             draft: 'збережено як чернетку',

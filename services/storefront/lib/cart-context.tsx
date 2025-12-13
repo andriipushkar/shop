@@ -29,12 +29,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const [isLoading, setIsLoading] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
 
-    // Initialize userId
+    // Initialize userId with cryptographically secure ID
     useEffect(() => {
         let savedUserId = localStorage.getItem('userId');
         if (!savedUserId) {
-            // Generate random user ID for web users (1M+ to avoid collision with Telegram IDs)
-            const newUserId = Math.floor(Math.random() * 1000000) + 1000000;
+            // Generate cryptographically secure user ID using Web Crypto API
+            // Uses first 8 characters of UUID and converts to number for compatibility
+            const uuid = crypto.randomUUID();
+            const newUserId = parseInt(uuid.replace(/-/g, '').slice(0, 8), 16) + 1000000;
             localStorage.setItem('userId', String(newUserId));
             savedUserId = String(newUserId);
         }

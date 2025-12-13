@@ -1,3 +1,5 @@
+import { apiLogger } from './logger';
+
 export interface Category {
     id: string;
     name: string;
@@ -40,7 +42,7 @@ export interface ProductFilter {
 }
 
 export async function getProducts(filter?: ProductFilter): Promise<Product[]> {
-    console.log('Fetching products from:', CORE_URL);
+    apiLogger.debug('Fetching products from core service', { url: CORE_URL, filter });
     try {
         const params = new URLSearchParams();
         if (filter?.search) params.set('search', filter.search);
@@ -57,13 +59,13 @@ export async function getProducts(filter?: ProductFilter): Promise<Product[]> {
         });
 
         if (!res.ok) {
-            console.error('Failed to fetch:', res.status, res.statusText);
+            apiLogger.error('Failed to fetch products', undefined, { status: res.status, statusText: res.statusText });
             return [];
         }
 
         return res.json();
     } catch (error) {
-        console.error('Error fetching products:', error);
+        apiLogger.error('Error fetching products', error);
         return [];
     }
 }
@@ -76,13 +78,13 @@ export async function getCategories(): Promise<Category[]> {
         });
 
         if (!res.ok) {
-            console.error('Failed to fetch categories:', res.status, res.statusText);
+            apiLogger.error('Failed to fetch categories', undefined, { status: res.status, statusText: res.statusText });
             return [];
         }
 
         return res.json();
     } catch (error) {
-        console.error('Error fetching categories:', error);
+        apiLogger.error('Error fetching categories', error);
         return [];
     }
 }
@@ -100,13 +102,13 @@ export async function createOrder(productId: string, quantity: number, userId: n
         });
 
         if (!res.ok) {
-            console.error('Failed to create order:', res.status, res.statusText);
+            apiLogger.error('Failed to create order', undefined, { status: res.status, statusText: res.statusText });
             return null;
         }
 
         return res.json();
     } catch (error) {
-        console.error('Error creating order:', error);
+        apiLogger.error('Error creating order', error);
         return null;
     }
 }
@@ -123,7 +125,7 @@ export async function getProduct(id: string): Promise<Product | null> {
 
         return res.json();
     } catch (error) {
-        console.error('Error fetching product:', error);
+        apiLogger.error('Error fetching product', error, { productId: id });
         return null;
     }
 }
@@ -135,7 +137,7 @@ export async function getOrders(userId: number): Promise<Order[]> {
         });
 
         if (!res.ok) {
-            console.error('Failed to fetch orders:', res.status, res.statusText);
+            apiLogger.error('Failed to fetch orders', undefined, { status: res.status, statusText: res.statusText, userId });
             return [];
         }
 
@@ -151,7 +153,7 @@ export async function getOrders(userId: number): Promise<Order[]> {
 
         return enrichedOrders;
     } catch (error) {
-        console.error('Error fetching orders:', error);
+        apiLogger.error('Error fetching orders', error, { userId });
         return [];
     }
 }
@@ -173,13 +175,13 @@ export async function getCart(userId: number): Promise<ApiCartItem[]> {
         });
 
         if (!res.ok) {
-            console.error('Failed to fetch cart:', res.status);
+            apiLogger.error('Failed to fetch cart', undefined, { status: res.status, userId });
             return [];
         }
 
         return res.json();
     } catch (error) {
-        console.error('Error fetching cart:', error);
+        apiLogger.error('Error fetching cart', error, { userId });
         return [];
     }
 }
@@ -194,7 +196,7 @@ export async function addToCartApi(userId: number, productId: string, quantity: 
 
         return res.ok;
     } catch (error) {
-        console.error('Error adding to cart:', error);
+        apiLogger.error('Error adding to cart', error, { userId, productId, quantity });
         return false;
     }
 }
@@ -207,7 +209,7 @@ export async function clearCartApi(userId: number): Promise<boolean> {
 
         return res.ok;
     } catch (error) {
-        console.error('Error clearing cart:', error);
+        apiLogger.error('Error clearing cart', error, { userId });
         return false;
     }
 }
@@ -220,7 +222,7 @@ export async function removeFromCartApi(userId: number, productId: string): Prom
 
         return res.ok;
     } catch (error) {
-        console.error('Error removing from cart:', error);
+        apiLogger.error('Error removing from cart', error, { userId, productId });
         return false;
     }
 }
@@ -235,7 +237,7 @@ export async function updateCartQuantityApi(userId: number, productId: string, q
 
         return res.ok;
     } catch (error) {
-        console.error('Error updating cart:', error);
+        apiLogger.error('Error updating cart', error, { userId, productId, quantity });
         return false;
     }
 }
@@ -262,7 +264,7 @@ export async function validatePromoCode(code: string): Promise<PromoValidation> 
         const data = await res.json();
         return { valid: true, discount: data.discount, code: data.code };
     } catch (error) {
-        console.error('Error validating promo:', error);
+        apiLogger.error('Error validating promo', error, { code });
         return { valid: false, discount: 0 };
     }
 }
@@ -277,7 +279,7 @@ export async function usePromoCode(code: string): Promise<boolean> {
 
         return res.ok;
     } catch (error) {
-        console.error('Error using promo:', error);
+        apiLogger.error('Error using promo', error, { code });
         return false;
     }
 }

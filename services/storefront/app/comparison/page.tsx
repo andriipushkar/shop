@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useComparison } from '@/lib/comparison-context';
 import { useCart } from '@/lib/cart-context';
 import { useWishlist } from '@/lib/wishlist-context';
@@ -225,12 +226,14 @@ export default function ComparisonPage() {
                                                         <XMarkIcon className="w-4 h-4" />
                                                     </button>
                                                     <Link href={`/product/${item.productId}`}>
-                                                        <div className="aspect-square w-32 mx-auto bg-gray-100 rounded-lg overflow-hidden mb-3">
+                                                        <div className="aspect-square w-32 mx-auto bg-gray-100 rounded-lg overflow-hidden mb-3 relative">
                                                             {item.image ? (
-                                                                <img
+                                                                <Image
                                                                     src={item.image}
                                                                     alt={item.name}
-                                                                    className="w-full h-full object-cover"
+                                                                    fill
+                                                                    sizes="128px"
+                                                                    className="object-cover"
                                                                 />
                                                             ) : (
                                                                 <div className="w-full h-full flex items-center justify-center">

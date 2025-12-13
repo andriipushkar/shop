@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { logger } from '@/lib/logger';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -347,7 +348,7 @@ export default function SuppliersPage() {
 
   const handleDelete = (supplier: Supplier) => {
     if (confirm(`Видалити постачальника "${supplier.name}"?`)) {
-      console.log('Delete:', supplier.id);
+      logger.info('Delete supplier', { supplierId: supplier.id });
     }
   };
 

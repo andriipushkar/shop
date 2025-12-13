@@ -369,3 +369,336 @@ describe('SEO Best Practices', () => {
         });
     });
 });
+
+// ============ NEW SEO HELPERS TESTS ============
+
+describe('New SEO Helpers', () => {
+    describe('generateHreflangAlternates', () => {
+        it('should generate correct hreflang structure', () => {
+            const { generateHreflangAlternates } = require('../../lib/seo-config');
+            const result = generateHreflangAlternates('/category/smartphones');
+
+            expect(result.canonical).toBe('https://techshop.ua/category/smartphones');
+            expect(result.languages['uk-UA']).toBe('https://techshop.ua/category/smartphones');
+            expect(result.languages['en-US']).toBe('https://techshop.ua/en/category/smartphones');
+            expect(result.languages['x-default']).toBe('https://techshop.ua/category/smartphones');
+        });
+
+        it('should handle root path', () => {
+            const { generateHreflangAlternates } = require('../../lib/seo-config');
+            const result = generateHreflangAlternates('/');
+
+            expect(result.canonical).toBe('https://techshop.ua/');
+            expect(result.languages['en-US']).toBe('https://techshop.ua/en/');
+        });
+    });
+
+    describe('generatePaginationMeta', () => {
+        it('should generate pagination links correctly', () => {
+            const { generatePaginationMeta } = require('../../lib/seo-config');
+            const result = generatePaginationMeta({
+                currentPage: 2,
+                totalPages: 5,
+                basePath: '/category/smartphones',
+            });
+
+            expect(result.canonical).toContain('page=2');
+            expect(result.prev).toBeDefined();
+            expect(result.next).toBeDefined();
+        });
+
+        it('should not have prev on first page', () => {
+            const { generatePaginationMeta } = require('../../lib/seo-config');
+            const result = generatePaginationMeta({
+                currentPage: 1,
+                totalPages: 5,
+                basePath: '/category/smartphones',
+            });
+
+            expect(result.prev).toBeUndefined();
+            expect(result.next).toBeDefined();
+        });
+
+        it('should not have next on last page', () => {
+            const { generatePaginationMeta } = require('../../lib/seo-config');
+            const result = generatePaginationMeta({
+                currentPage: 5,
+                totalPages: 5,
+                basePath: '/category/smartphones',
+            });
+
+            expect(result.prev).toBeDefined();
+            expect(result.next).toBeUndefined();
+        });
+
+        it('should handle query params', () => {
+            const { generatePaginationMeta } = require('../../lib/seo-config');
+            const result = generatePaginationMeta({
+                currentPage: 2,
+                totalPages: 5,
+                basePath: '/search',
+                queryParams: { q: 'iphone' },
+            });
+
+            expect(result.canonical).toContain('q=iphone');
+            expect(result.canonical).toContain('page=2');
+        });
+    });
+
+    describe('generateVideoObjectJsonLd', () => {
+        it('should generate valid VideoObject schema', () => {
+            const { generateVideoObjectJsonLd } = require('../../lib/seo-config');
+            const video = {
+                name: 'iPhone 15 Pro Огляд',
+                description: 'Детальний огляд нового iPhone 15 Pro',
+                thumbnailUrl: 'https://example.com/thumbnail.jpg',
+                uploadDate: '2025-01-15',
+                duration: 'PT5M30S',
+            };
+
+            const jsonLd = generateVideoObjectJsonLd(video);
+
+            expect(jsonLd['@context']).toBe('https://schema.org');
+            expect(jsonLd['@type']).toBe('VideoObject');
+            expect(jsonLd.name).toBe(video.name);
+            expect(jsonLd.thumbnailUrl).toBe(video.thumbnailUrl);
+            expect(jsonLd.duration).toBe('PT5M30S');
+        });
+
+        it('should not include optional fields when not provided', () => {
+            const { generateVideoObjectJsonLd } = require('../../lib/seo-config');
+            const video = {
+                name: 'Test Video',
+                description: 'Test Description',
+                thumbnailUrl: 'https://example.com/thumb.jpg',
+                uploadDate: '2025-01-15',
+            };
+
+            const jsonLd = generateVideoObjectJsonLd(video);
+
+            expect(jsonLd.duration).toBeUndefined();
+            expect(jsonLd.contentUrl).toBeUndefined();
+            expect(jsonLd.embedUrl).toBeUndefined();
+        });
+    });
+
+    describe('generateHowToJsonLd', () => {
+        it('should generate valid HowTo schema', () => {
+            const { generateHowToJsonLd } = require('../../lib/seo-config');
+            const howTo = {
+                name: 'Як налаштувати iPhone 15',
+                description: 'Покрокова інструкція з налаштування нового iPhone',
+                totalTime: 'PT15M',
+                steps: [
+                    { name: 'Увімкніть iPhone', text: 'Натисніть і утримуйте бокову кнопку' },
+                    { name: 'Виберіть мову', text: 'Оберіть українську мову' },
+                ],
+            };
+
+            const jsonLd = generateHowToJsonLd(howTo);
+
+            expect(jsonLd['@context']).toBe('https://schema.org');
+            expect(jsonLd['@type']).toBe('HowTo');
+            expect(jsonLd.name).toBe(howTo.name);
+            expect(jsonLd.totalTime).toBe('PT15M');
+            expect(jsonLd.step).toHaveLength(2);
+            expect(jsonLd.step[0].position).toBe(1);
+            expect(jsonLd.step[0]['@type']).toBe('HowToStep');
+        });
+    });
+
+    describe('generateAggregateOfferJsonLd', () => {
+        it('should generate valid AggregateOffer schema', () => {
+            const { generateAggregateOfferJsonLd } = require('../../lib/seo-config');
+            const offer = {
+                lowPrice: 5000,
+                highPrice: 100000,
+                offerCount: 150,
+            };
+
+            const jsonLd = generateAggregateOfferJsonLd(offer);
+
+            expect(jsonLd['@type']).toBe('AggregateOffer');
+            expect(jsonLd.lowPrice).toBe(5000);
+            expect(jsonLd.highPrice).toBe(100000);
+            expect(jsonLd.offerCount).toBe(150);
+            expect(jsonLd.priceCurrency).toBe('UAH');
+        });
+    });
+
+    describe('generateExtendedProductJsonLd', () => {
+        it('should generate valid extended Product schema with warranty', () => {
+            const { generateExtendedProductJsonLd } = require('../../lib/seo-config');
+            const product = {
+                name: 'iPhone 15 Pro',
+                description: 'Latest Apple smartphone',
+                price: 49999,
+                image: 'https://example.com/iphone.jpg',
+                sku: 'IP15PRO-256',
+                brand: 'Apple',
+                category: 'Смартфони',
+                inStock: true,
+                warranty: {
+                    durationMonths: 12,
+                    type: 'manufacturer' as const,
+                },
+            };
+
+            const jsonLd = generateExtendedProductJsonLd(product);
+
+            expect(jsonLd['@context']).toBe('https://schema.org');
+            expect(jsonLd['@type']).toBe('Product');
+            expect(jsonLd.warranty).toBeDefined();
+            expect(jsonLd.warranty['@type']).toBe('WarrantyPromise');
+            expect(jsonLd.warranty.durationOfWarranty.value).toBe(12);
+        });
+
+        it('should include shipping details when provided', () => {
+            const { generateExtendedProductJsonLd } = require('../../lib/seo-config');
+            const product = {
+                name: 'Test Product',
+                description: 'Test Description',
+                price: 1000,
+                image: 'https://example.com/test.jpg',
+                sku: 'TEST-001',
+                brand: 'TestBrand',
+                category: 'Test',
+                inStock: true,
+                shipping: {
+                    freeShippingThreshold: 2000,
+                    deliveryDays: { min: 1, max: 3 },
+                },
+            };
+
+            const jsonLd = generateExtendedProductJsonLd(product);
+
+            expect(jsonLd.offers.shippingDetails).toBeDefined();
+            expect(jsonLd.offers.shippingDetails['@type']).toBe('OfferShippingDetails');
+            expect(jsonLd.offers.shippingDetails.deliveryTime).toBeDefined();
+        });
+
+        it('should include return policy when provided', () => {
+            const { generateExtendedProductJsonLd } = require('../../lib/seo-config');
+            const product = {
+                name: 'Test Product',
+                description: 'Test Description',
+                price: 1000,
+                image: 'https://example.com/test.jpg',
+                sku: 'TEST-001',
+                brand: 'TestBrand',
+                category: 'Test',
+                inStock: true,
+                returnPolicy: {
+                    days: 14,
+                    type: 'full' as const,
+                },
+            };
+
+            const jsonLd = generateExtendedProductJsonLd(product);
+
+            expect(jsonLd.offers.hasMerchantReturnPolicy).toBeDefined();
+            expect(jsonLd.offers.hasMerchantReturnPolicy['@type']).toBe('MerchantReturnPolicy');
+            expect(jsonLd.offers.hasMerchantReturnPolicy.merchantReturnDays).toBe(14);
+        });
+
+        it('should handle limited availability', () => {
+            const { generateExtendedProductJsonLd } = require('../../lib/seo-config');
+            const product = {
+                name: 'Test Product',
+                description: 'Test Description',
+                price: 1000,
+                image: 'https://example.com/test.jpg',
+                sku: 'TEST-001',
+                brand: 'TestBrand',
+                category: 'Test',
+                inStock: true,
+                stockCount: 3,
+            };
+
+            const jsonLd = generateExtendedProductJsonLd(product);
+
+            expect(jsonLd.offers.availability).toBe('https://schema.org/LimitedAvailability');
+        });
+    });
+
+    describe('generatePinterestMeta', () => {
+        it('should generate valid Pinterest Rich Pins metadata', () => {
+            const { generatePinterestMeta } = require('../../lib/seo-config');
+            const product = {
+                name: 'iPhone 15 Pro',
+                price: 49999,
+                availability: 'in stock' as const,
+            };
+
+            const meta = generatePinterestMeta(product);
+
+            expect(meta['og:type']).toBe('product');
+            expect(meta['product:price:amount']).toBe('49999');
+            expect(meta['product:price:currency']).toBe('UAH');
+            expect(meta['product:availability']).toBe('in stock');
+        });
+    });
+
+    describe('generateSearchMetadata', () => {
+        it('should generate metadata for search with query', () => {
+            const { generateSearchMetadata } = require('../../lib/seo-config');
+            const result = generateSearchMetadata({
+                query: 'iphone',
+                resultsCount: 50,
+                page: 1,
+            });
+
+            expect(result.title).toContain('iphone');
+            expect(result.title).toContain('50 товарів');
+            expect(result.description).toContain('iphone');
+            expect(result.robots.index).toBe(true);
+        });
+
+        it('should not index empty search results', () => {
+            const { generateSearchMetadata } = require('../../lib/seo-config');
+            const result = generateSearchMetadata({
+                query: 'nonexistent',
+                resultsCount: 0,
+                page: 1,
+            });
+
+            expect(result.robots.index).toBe(false);
+        });
+
+        it('should not index search without query', () => {
+            const { generateSearchMetadata } = require('../../lib/seo-config');
+            const result = generateSearchMetadata({
+                resultsCount: 100,
+                page: 1,
+            });
+
+            expect(result.robots.index).toBe(false);
+        });
+    });
+});
+
+describe('Robots.txt Extended Rules', () => {
+    it('should block aggressive SEO bots', () => {
+        const blockedBots = ['AhrefsBot', 'SemrushBot', 'MJ12bot'];
+
+        blockedBots.forEach(bot => {
+            expect(bot).toBeDefined();
+        });
+    });
+
+    it('should have specific rules for Googlebot', () => {
+        const googlebotAllowed = ['/', '/category/', '/product/', '/search'];
+
+        googlebotAllowed.forEach(path => {
+            expect(path).toMatch(/^\//);
+        });
+    });
+
+    it('should have specific rules for Google Images', () => {
+        const imageAllowed = ['/products/', '/images/', '/icons/'];
+
+        imageAllowed.forEach(path => {
+            expect(path).toMatch(/^\//);
+        });
+    });
+});

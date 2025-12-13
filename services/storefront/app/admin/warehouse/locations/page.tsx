@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { logger } from '@/lib/logger';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -362,7 +363,7 @@ export default function LocationsPage() {
   const handleDelete = (location: Location) => {
     if (confirm(`Видалити "${location.name}"?`)) {
       // API call
-      console.log('Delete:', location.id);
+      logger.info('Delete location', { locationId: location.id });
     }
   };
 

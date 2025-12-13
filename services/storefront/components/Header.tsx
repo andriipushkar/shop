@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/lib/cart-context';
 import { useAuth } from '@/lib/auth-context';
 import { useWishlist } from '@/lib/wishlist-context';
 import { useComparison } from '@/lib/comparison-context';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import {
     MagnifyingGlassIcon,
     UserIcon,
@@ -92,25 +93,25 @@ export default function Header() {
     const megaMenuRef = useRef<HTMLDivElement>(null);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const handleSearch = (e: React.FormEvent) => {
+    const handleSearch = useCallback((e: React.FormEvent) => {
         e.preventDefault();
         if (searchQuery.trim()) {
             router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
         }
-    };
+    }, [searchQuery, router]);
 
-    const handleMouseEnter = (slug: string) => {
+    const handleMouseEnter = useCallback((slug: string) => {
         if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
         }
         setActiveMegaMenu(slug);
-    };
+    }, []);
 
-    const handleMouseLeave = () => {
+    const handleMouseLeave = useCallback(() => {
         timeoutRef.current = setTimeout(() => {
             setActiveMegaMenu(null);
         }, 150);
-    };
+    }, []);
 
     useEffect(() => {
         return () => {
@@ -156,11 +157,13 @@ export default function Header() {
                         <button
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
                             className="lg:hidden p-2 text-gray-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                            aria-label={isMenuOpen ? 'Закрити меню' : 'Відкрити меню'}
+                            aria-expanded={isMenuOpen}
                         >
                             {isMenuOpen ? (
-                                <XMarkIcon className="w-6 h-6" />
+                                <XMarkIcon className="w-6 h-6" aria-hidden="true" />
                             ) : (
-                                <Bars3Icon className="w-6 h-6" />
+                                <Bars3Icon className="w-6 h-6" aria-hidden="true" />
                             )}
                         </button>
 
@@ -203,12 +206,14 @@ export default function Header() {
                         </form>
 
                         {/* Right Actions */}
-                        <nav className="flex items-center gap-1 sm:gap-2">
+                        <nav className="flex items-center gap-1 sm:gap-2" aria-label="Дії користувача">
+                            <LanguageSwitcher variant="compact" showFlag={true} className="hidden sm:block" />
                             <Link
                                 href={isAuthenticated ? "/profile" : "/auth/login"}
                                 className="hidden sm:flex flex-col items-center text-gray-600 hover:text-teal-600 transition-colors p-2 rounded-lg hover:bg-teal-50"
+                                aria-label={isAuthenticated ? 'Перейти до профілю' : 'Увійти в акаунт'}
                             >
-                                <UserIcon className="w-6 h-6" />
+                                <UserIcon className="w-6 h-6" aria-hidden="true" />
                                 <span className="text-xs mt-1 hidden lg:block">
                                     {isAuthenticated ? user?.name?.split(' ')[0] || 'Профіль' : 'Увійти'}
                                 </span>
@@ -216,11 +221,12 @@ export default function Header() {
                             <Link
                                 href="/comparison"
                                 className="hidden sm:flex flex-col items-center text-gray-600 hover:text-teal-600 transition-colors p-2 rounded-lg hover:bg-teal-50 relative"
+                                aria-label={`Порівняння товарів${comparisonCount > 0 ? ` (${comparisonCount})` : ''}`}
                             >
-                                <ScaleIcon className="w-6 h-6" />
+                                <ScaleIcon className="w-6 h-6" aria-hidden="true" />
                                 <span className="text-xs mt-1 hidden lg:block">Порівняти</span>
                                 {comparisonCount > 0 && (
-                                    <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                                    <span className="absolute -top-1 -right-1 bg-primary-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center" aria-hidden="true">
                                         {comparisonCount}
                                     </span>
                                 )}
@@ -228,11 +234,12 @@ export default function Header() {
                             <Link
                                 href="/wishlist"
                                 className="hidden sm:flex flex-col items-center text-gray-600 hover:text-teal-600 transition-colors p-2 rounded-lg hover:bg-teal-50 relative"
+                                aria-label={`Список бажань${wishlistCount > 0 ? ` (${wishlistCount})` : ''}`}
                             >
-                                <HeartIcon className="w-6 h-6" />
+                                <HeartIcon className="w-6 h-6" aria-hidden="true" />
                                 <span className="text-xs mt-1 hidden lg:block">Бажання</span>
                                 {wishlistCount > 0 && (
-                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center" aria-hidden="true">
                                         {wishlistCount}
                                     </span>
                                 )}
@@ -240,8 +247,9 @@ export default function Header() {
                             <Link
                                 href="/cart"
                                 className="relative flex items-center gap-2 bg-gradient-primary text-white px-4 py-2.5 rounded-xl hover:shadow-lg hover:shadow-teal-200 transition-all duration-200 group"
+                                aria-label={`Кошик${totalItems > 0 ? ` (${totalItems} товар${totalItems === 1 ? '' : 'ів'}, ${totalPrice.toFixed(0)} грн)` : ' (порожній)'}`}
                             >
-                                <ShoppingCartIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                <ShoppingCartIcon className="w-5 h-5 group-hover:scale-110 transition-transform" aria-hidden="true" />
                                 <div className="hidden sm:block text-left">
                                     <span className="text-xs text-teal-100">Кошик</span>
                                     <p className="text-sm font-semibold leading-tight">
@@ -249,7 +257,7 @@ export default function Header() {
                                     </p>
                                 </div>
                                 {totalItems > 0 && (
-                                    <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-bounce-soft">
+                                    <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-bounce-soft" aria-hidden="true">
                                         {totalItems}
                                     </span>
                                 )}
@@ -461,6 +469,12 @@ export default function Header() {
                                 0 800 123 456
                             </a>
                             <p className="text-teal-700 text-sm mt-1">Безкоштовно по Україні</p>
+                        </div>
+
+                        {/* Mobile Language Switcher */}
+                        <div className="mt-6 p-4 border-t border-gray-200">
+                            <p className="text-gray-600 font-medium mb-3">Мова</p>
+                            <LanguageSwitcher variant="buttons" showFlag={true} showName={true} />
                         </div>
                     </nav>
                 </div>

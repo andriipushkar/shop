@@ -3,6 +3,8 @@
  * API Documentation: https://developers.novaposhta.ua/documentation
  */
 
+import { deliveryLogger } from './logger';
+
 // Types
 export interface NovaPoshtaCity {
   Ref: string;
@@ -214,7 +216,7 @@ async function callNovaPoshtaApi<T>(
 ): Promise<NovaPoshtaApiResponse<T>> {
   // If no API key, use mock data
   if (!API_KEY) {
-    console.warn('Nova Poshta API key not configured, using mock data');
+    deliveryLogger.warn('Nova Poshta API key not configured, using mock data');
     return getMockResponse<T>(modelName, calledMethod, methodProperties);
   }
 
@@ -238,7 +240,7 @@ async function callNovaPoshtaApi<T>(
 
     return await response.json();
   } catch (error) {
-    console.error('Nova Poshta API error:', error);
+    deliveryLogger.error('Nova Poshta API error', error, { modelName, calledMethod });
     // Fallback to mock data on error
     return getMockResponse<T>(modelName, calledMethod, methodProperties);
   }
@@ -382,7 +384,7 @@ export async function searchCities(query: string): Promise<NovaPoshtaCity[]> {
   });
 
   if (!response.success) {
-    console.error('Failed to search cities:', response.errors);
+    deliveryLogger.error('Failed to search cities', undefined, { errors: response.errors, query });
     return [];
   }
 
@@ -398,7 +400,7 @@ export async function getCities(): Promise<NovaPoshtaCity[]> {
   });
 
   if (!response.success) {
-    console.error('Failed to get cities:', response.errors);
+    deliveryLogger.error('Failed to get cities', undefined, { errors: response.errors });
     return [];
   }
 
@@ -415,7 +417,7 @@ export async function getWarehouses(cityRef: string): Promise<NovaPoshtaWarehous
   });
 
   if (!response.success) {
-    console.error('Failed to get warehouses:', response.errors);
+    deliveryLogger.error('Failed to get warehouses', undefined, { errors: response.errors, cityRef });
     return [];
   }
 
@@ -433,7 +435,7 @@ export async function searchWarehouses(cityRef: string, query: string): Promise<
   });
 
   if (!response.success) {
-    console.error('Failed to search warehouses:', response.errors);
+    deliveryLogger.error('Failed to search warehouses', undefined, { errors: response.errors, cityRef, query });
     return [];
   }
 
@@ -461,7 +463,7 @@ export async function calculateDeliveryPrice(
   });
 
   if (!response.success || response.data.length === 0) {
-    console.error('Failed to calculate delivery price:', response.errors);
+    deliveryLogger.error('Failed to calculate delivery price', undefined, { errors: response.errors, citySender, cityRecipient, weight, cost });
     return null;
   }
 
@@ -477,7 +479,7 @@ export async function trackShipment(trackingNumber: string): Promise<NovaPoshtaT
   });
 
   if (!response.success || response.data.length === 0) {
-    console.error('Failed to track shipment:', response.errors);
+    deliveryLogger.error('Failed to track shipment', undefined, { errors: response.errors, trackingNumber });
     return null;
   }
 

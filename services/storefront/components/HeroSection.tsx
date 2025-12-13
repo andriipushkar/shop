@@ -157,16 +157,16 @@ export default function HeroSection() {
 
                 {/* Dots */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-                    {slides.map((_, index) => (
+                    {slides.map((slide) => (
                         <button
-                            key={index}
-                            onClick={() => goToSlide(index)}
+                            key={`dot-${slide.id}`}
+                            onClick={() => goToSlide(slides.indexOf(slide))}
                             className={`w-3 h-3 rounded-full transition-all duration-200 ${
-                                currentSlide === index
+                                currentSlide === slides.indexOf(slide)
                                     ? 'bg-white w-8'
                                     : 'bg-white/50 hover:bg-white/70'
                             }`}
-                            aria-label={`Go to slide ${index + 1}`}
+                            aria-label={`Go to slide ${slides.indexOf(slide) + 1}`}
                         />
                     ))}
                 </div>
@@ -176,9 +176,9 @@ export default function HeroSection() {
             <div className="bg-white border-y border-gray-100">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                        {features.map((feature, index) => (
+                        {features.map((feature) => (
                             <div
-                                key={index}
+                                key={`feature-${feature.title}`}
                                 className="flex items-center gap-4 group"
                             >
                                 <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center group-hover:bg-teal-200 transition-colors">

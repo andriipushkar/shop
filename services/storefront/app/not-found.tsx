@@ -1,4 +1,14 @@
 import Link from 'next/link';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+    title: 'Сторінку не знайдено (404) | TechShop',
+    description: 'На жаль, сторінку не знайдено. Поверніться на головну або скористайтесь пошуком.',
+    robots: {
+        index: false,
+        follow: true,
+    },
+};
 
 export default function NotFound() {
     return (

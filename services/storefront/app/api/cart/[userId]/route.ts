@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiLogger } from '@/lib/logger';
 
 const CORE_URL = process.env.CORE_SERVICE_URL || 'http://core:8080';
 
@@ -20,7 +21,7 @@ export async function GET(
         const data = await res.json();
         return NextResponse.json(data);
     } catch (error) {
-        console.error('Error fetching cart:', error);
+        apiLogger.error('Error fetching cart:', error);
         return NextResponse.json([], { status: 500 });
     }
 }
@@ -48,7 +49,7 @@ export async function POST(
         const data = await res.json();
         return NextResponse.json(data, { status: 201 });
     } catch (error) {
-        console.error('Error adding to cart:', error);
+        apiLogger.error('Error adding to cart:', error);
         return NextResponse.json({ error: 'Failed to add to cart' }, { status: 500 });
     }
 }
@@ -70,7 +71,7 @@ export async function DELETE(
 
         return new NextResponse(null, { status: 204 });
     } catch (error) {
-        console.error('Error clearing cart:', error);
+        apiLogger.error('Error clearing cart:', error);
         return NextResponse.json({ error: 'Failed to clear cart' }, { status: 500 });
     }
 }

@@ -1,0 +1,877 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==================== USER & AUTH ====================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  phone         String?   @unique
+  passwordHash  String?
+  firstName     String?
+  lastName      String?
+  avatar        String?
+  role          UserRole  @default(CUSTOMER)
+  isVerified    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  // Relations
+  addresses     Address[]
+  orders        Order[]
+  cart          Cart?
+  wishlist      WishlistItem[]
+  reviews       Review[]
+  priceAlerts   PriceAlert[]
+  notifications Notification[]
+  sessions      Session[]
+  loyaltyPoints LoyaltyPoints?
+  chatMessages  ChatMessage[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  MANAGER
+  WAREHOUSE
+  SUPPORT
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  userAgent    String?
+  ip           String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Address {
+  id           String   @id @default(cuid())
+  userId       String
+  type         AddressType @default(SHIPPING)
+  firstName    String
+  lastName     String
+  phone        String
+  city         String
+  region       String?
+  street       String
+  building     String?
+  apartment    String?
+  postalCode   String?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@map("addresses")
+}
+
+enum AddressType {
+  SHIPPING
+  BILLING
+}
+
+// ==================== PRODUCTS ====================
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String
+  nameUa      String
+  slug        String     @unique
+  description String?
+  image       String?
+  parentId    String?
+  order       Int        @default(0)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id              String   @id @default(cuid())
+  sku             String   @unique
+  name            String
+  nameUa          String
+  slug            String   @unique
+  description     String?
+  descriptionUa   String?
+  price           Decimal  @db.Decimal(10, 2)
+  compareAtPrice  Decimal? @db.Decimal(10, 2)
+  costPrice       Decimal? @db.Decimal(10, 2)
+  categoryId      String
+  brandId         String?
+  status          ProductStatus @default(DRAFT)
+  isNew           Boolean  @default(false)
+  isBestseller    Boolean  @default(false)
+  isFeatured      Boolean  @default(false)
+  weight          Decimal? @db.Decimal(10, 3)
+  length          Decimal? @db.Decimal(10, 2)
+  width           Decimal? @db.Decimal(10, 2)
+  height          Decimal? @db.Decimal(10, 2)
+  metaTitle       String?
+  metaDescription String?
+  viewCount       Int      @default(0)
+  soldCount       Int      @default(0)
+  rating          Decimal  @default(0) @db.Decimal(2, 1)
+  reviewCount     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  category         Category              @relation(fields: [categoryId], references: [id])
+  brand            Brand?                @relation(fields: [brandId], references: [id])
+  images           ProductImage[]
+  attributes       ProductAttribute[]
+  variants         ProductVariant[]
+  inventory        Inventory[]
+  reviews          Review[]
+  orderItems       OrderItem[]
+  cartItems        CartItem[]
+  wishlistItems    WishlistItem[]
+  priceAlerts      PriceAlert[]
+  priceHistory     PriceHistory[]
+  bundleItems      BundleItem[]
+  marketplaceLinks MarketplaceProduct[]
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([status])
+  @@index([price])
+  @@map("products")
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+  OUT_OF_STOCK
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  alt       String?
+  order     Int      @default(0)
+  isMain    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_images")
+}
+
+model ProductAttribute {
+  id          String @id @default(cuid())
+  productId   String
+  attributeId String
+  value       String
+
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attribute Attribute @relation(fields: [attributeId], references: [id])
+
+  @@unique([productId, attributeId])
+  @@map("product_attributes")
+}
+
+model Attribute {
+  id        String   @id @default(cuid())
+  name      String
+  nameUa    String
+  type      AttributeType @default(TEXT)
+  unit      String?
+  isFilter  Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  values   ProductAttribute[]
+  options  AttributeOption[]
+
+  @@map("attributes")
+}
+
+enum AttributeType {
+  TEXT
+  NUMBER
+  SELECT
+  MULTISELECT
+  COLOR
+  BOOLEAN
+}
+
+model AttributeOption {
+  id          String @id @default(cuid())
+  attributeId String
+  value       String
+  valueUa     String
+  order       Int    @default(0)
+
+  attribute Attribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@map("attribute_options")
+}
+
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String
+  sku       String   @unique
+  name      String
+  price     Decimal  @db.Decimal(10, 2)
+  stock     Int      @default(0)
+  options   Json     // { "color": "red", "size": "M" }
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventory  Inventory[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@map("product_variants")
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  logo        String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+
+  @@map("brands")
+}
+
+model PriceHistory {
+  id        String   @id @default(cuid())
+  productId String
+  price     Decimal  @db.Decimal(10, 2)
+  source    String?  // manual, import, marketplace_sync
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, createdAt])
+  @@map("price_history")
+}
+
+// ==================== INVENTORY ====================
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  address   String
+  city      String
+  isActive  Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inventory Inventory[]
+  movements InventoryMovement[]
+
+  @@map("warehouses")
+}
+
+model Inventory {
+  id          String   @id @default(cuid())
+  productId   String
+  variantId   String?
+  warehouseId String
+  quantity    Int      @default(0)
+  reserved    Int      @default(0)
+  minStock    Int      @default(0)
+  maxStock    Int?
+  reorderQty  Int?
+  location    String?  // bin location
+  updatedAt   DateTime @updatedAt
+
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  warehouse Warehouse       @relation(fields: [warehouseId], references: [id])
+
+  @@unique([productId, variantId, warehouseId])
+  @@index([warehouseId])
+  @@map("inventory")
+}
+
+model InventoryMovement {
+  id          String        @id @default(cuid())
+  warehouseId String
+  productId   String
+  variantId   String?
+  type        MovementType
+  quantity    Int
+  reference   String?       // order ID, transfer ID, etc.
+  notes       String?
+  createdBy   String?
+  createdAt   DateTime      @default(now())
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@index([warehouseId, createdAt])
+  @@map("inventory_movements")
+}
+
+enum MovementType {
+  PURCHASE
+  SALE
+  RETURN
+  ADJUSTMENT
+  TRANSFER_IN
+  TRANSFER_OUT
+  DAMAGE
+  EXPIRED
+}
+
+// ==================== ORDERS ====================
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  userId          String?
+  status          OrderStatus @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  shippingStatus  ShippingStatus @default(PENDING)
+  subtotal        Decimal     @db.Decimal(10, 2)
+  discount        Decimal     @default(0) @db.Decimal(10, 2)
+  shippingCost    Decimal     @default(0) @db.Decimal(10, 2)
+  tax             Decimal     @default(0) @db.Decimal(10, 2)
+  total           Decimal     @db.Decimal(10, 2)
+  currency        String      @default("UAH")
+
+  // Customer info (for guest checkout)
+  customerEmail   String
+  customerPhone   String
+  customerName    String
+
+  // Shipping
+  addressId       String?
+  shippingMethod  String?
+  shippingCarrier String?
+  trackingNumber  String?
+
+  // Payment
+  paymentMethod   String?
+  paymentId       String?
+
+  // Promo
+  couponCode      String?
+  couponDiscount  Decimal     @default(0) @db.Decimal(10, 2)
+  loyaltyPoints   Int         @default(0)
+
+  // Marketplace
+  marketplace     String?     // rozetka, prom, etc.
+  externalId      String?
+
+  notes           String?
+  adminNotes      String?
+  completedAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user     User?       @relation(fields: [userId], references: [id])
+  address  Address?    @relation(fields: [addressId], references: [id])
+  items    OrderItem[]
+  payments Payment[]
+  history  OrderHistory[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([marketplace, externalId])
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum ShippingStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  RETURNED
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String
+  variantId   String?
+  sku         String
+  name        String
+  price       Decimal  @db.Decimal(10, 2)
+  quantity    Int
+  discount    Decimal  @default(0) @db.Decimal(10, 2)
+  total       Decimal  @db.Decimal(10, 2)
+  options     Json?    // variant options snapshot
+
+  order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@map("order_items")
+}
+
+model OrderHistory {
+  id        String   @id @default(cuid())
+  orderId   String
+  status    OrderStatus
+  comment   String?
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_history")
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  orderId       String
+  amount        Decimal       @db.Decimal(10, 2)
+  currency      String        @default("UAH")
+  method        String        // liqpay, monobank, cod, etc.
+  status        PaymentStatus @default(PENDING)
+  transactionId String?
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// ==================== CART ====================
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String?  @unique
+  sessionId String?  @unique
+  couponId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items  CartItem[]
+  coupon Coupon?     @relation(fields: [couponId], references: [id])
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  variantId String?
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart    Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@unique([cartId, productId, variantId])
+  @@map("cart_items")
+}
+
+// ==================== WISHLIST ====================
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlist_items")
+}
+
+// ==================== REVIEWS ====================
+
+model Review {
+  id          String   @id @default(cuid())
+  productId   String
+  userId      String
+  orderId     String?
+  rating      Int      // 1-5
+  title       String?
+  comment     String
+  pros        String?
+  cons        String?
+  isVerified  Boolean  @default(false) // verified purchase
+  isPublished Boolean  @default(false)
+  helpfulCount Int     @default(0)
+  images      Json?    // array of image URLs
+  reply       String?  // admin reply
+  repliedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([productId])
+  @@map("reviews")
+}
+
+// ==================== PROMOTIONS ====================
+
+model Coupon {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  type            CouponType
+  value           Decimal  @db.Decimal(10, 2)
+  minOrderAmount  Decimal? @db.Decimal(10, 2)
+  maxDiscount     Decimal? @db.Decimal(10, 2)
+  usageLimit      Int?
+  usageCount      Int      @default(0)
+  usagePerUser    Int?     @default(1)
+  startsAt        DateTime?
+  expiresAt       DateTime?
+  isActive        Boolean  @default(true)
+  productIds      String[] // applicable product IDs
+  categoryIds     String[] // applicable category IDs
+  excludeProducts String[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  carts Cart[]
+
+  @@map("coupons")
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_SHIPPING
+}
+
+// ==================== PRODUCT BUNDLES ====================
+
+model Bundle {
+  id              String   @id @default(cuid())
+  name            String
+  nameUa          String
+  slug            String   @unique
+  description     String?
+  image           String?
+  discountType    DiscountType
+  discountValue   Decimal  @db.Decimal(10, 2)
+  status          String   @default("active")
+  startsAt        DateTime?
+  expiresAt       DateTime?
+  soldCount       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items BundleItem[]
+
+  @@map("bundles")
+}
+
+model BundleItem {
+  id         String   @id @default(cuid())
+  bundleId   String
+  productId  String
+  quantity   Int      @default(1)
+  isRequired Boolean  @default(true)
+  order      Int      @default(0)
+
+  bundle  Bundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("bundle_items")
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FIXED_PRICE
+}
+
+// ==================== PRICE ALERTS ====================
+
+model PriceAlert {
+  id               String   @id @default(cuid())
+  userId           String
+  productId        String
+  targetPrice      Decimal  @db.Decimal(10, 2)
+  currentPrice     Decimal  @db.Decimal(10, 2)
+  alertType        String   // any_drop, target_price, percentage_drop
+  percentThreshold Int?
+  status           String   @default("active") // active, triggered, cancelled
+  triggeredAt      DateTime?
+  notifyVia        String[] // email, push, sms
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, status])
+  @@map("price_alerts")
+}
+
+// ==================== LOYALTY ====================
+
+model LoyaltyPoints {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  balance       Int      @default(0)
+  totalEarned   Int      @default(0)
+  totalSpent    Int      @default(0)
+  tier          String   @default("bronze") // bronze, silver, gold, platinum
+  tierExpiresAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions LoyaltyTransaction[]
+
+  @@map("loyalty_points")
+}
+
+model LoyaltyTransaction {
+  id        String   @id @default(cuid())
+  pointsId  String
+  type      String   // earn, spend, expire, bonus
+  amount    Int
+  balance   Int
+  reference String?  // order ID, campaign ID
+  notes     String?
+  createdAt DateTime @default(now())
+
+  points LoyaltyPoints @relation(fields: [pointsId], references: [id], onDelete: Cascade)
+
+  @@map("loyalty_transactions")
+}
+
+// ==================== NOTIFICATIONS ====================
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // order_status, price_drop, promo, etc.
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean  @default(false)
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model PushSubscription {
+  id         String   @id @default(cuid())
+  userId     String?
+  endpoint   String   @unique
+  keys       Json
+  createdAt  DateTime @default(now())
+
+  @@map("push_subscriptions")
+}
+
+// ==================== CHAT ====================
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  sessionId  String
+  userId     String?
+  sender     String   // user, agent, bot
+  message    String
+  metadata   Json?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
+}
+
+// ==================== CMS ====================
+
+model Page {
+  id          String   @id @default(cuid())
+  title       String
+  titleUa     String?
+  slug        String   @unique
+  content     String
+  contentUa   String?
+  template    String   @default("default")
+  status      String   @default("draft") // draft, published, archived
+  metaTitle   String?
+  metaDesc    String?
+  author      String?
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("pages")
+}
+
+model Banner {
+  id          String   @id @default(cuid())
+  title       String
+  image       String
+  mobileImage String?
+  link        String?
+  position    String   // hero, sidebar, footer, etc.
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  startsAt    DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("banners")
+}
+
+model MenuItem {
+  id       String @id @default(cuid())
+  menuId   String
+  label    String
+  labelUa  String?
+  url      String
+  parentId String?
+  order    Int    @default(0)
+  isActive Boolean @default(true)
+
+  parent   MenuItem?  @relation("MenuTree", fields: [parentId], references: [id])
+  children MenuItem[] @relation("MenuTree")
+
+  @@map("menu_items")
+}
+
+// ==================== MARKETPLACE INTEGRATION ====================
+
+model MarketplaceProduct {
+  id            String   @id @default(cuid())
+  productId     String
+  marketplace   String   // rozetka, prom, hotline
+  externalId    String
+  status        String   // active, inactive, moderation, rejected
+  lastSyncAt    DateTime?
+  syncError     String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, marketplace])
+  @@index([marketplace, externalId])
+  @@map("marketplace_products")
+}
+
+model MarketplaceOrder {
+  id            String   @id @default(cuid())
+  marketplace   String
+  externalId    String
+  localOrderId  String?
+  status        String
+  rawData       Json
+  syncedAt      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([marketplace, externalId])
+  @@map("marketplace_orders")
+}
+
+// ==================== ANALYTICS ====================
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  sessionId String
+  userId    String?
+  type      String   // page_view, product_view, add_to_cart, purchase, etc.
+  data      Json
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([type, createdAt])
+  @@map("analytics_events")
+}
+
+// ==================== BACKGROUND JOBS ====================
+
+model Job {
+  id          String   @id @default(cuid())
+  queue       String
+  name        String
+  data        Json
+  status      String   @default("pending") // pending, processing, completed, failed
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(3)
+  error       String?
+  result      Json?
+  runAt       DateTime @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([queue, status, runAt])
+  @@map("jobs")
+}

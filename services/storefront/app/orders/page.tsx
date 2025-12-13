@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Order, getOrders } from '@/lib/api';
 import { useCart } from '@/lib/cart-context';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const statusConfig: Record<string, { label: string; color: string; icon: string }> = {
     NEW: { label: 'Новий', color: 'bg-blue-100 text-blue-700', icon: '🆕' },
@@ -108,13 +109,17 @@ export default function OrdersPage() {
 
                                         <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
                                             {product?.image_url ? (
-                                                <img
-                                                    src={product.image_url}
-                                                    alt={product.name}
-                                                    className="w-16 h-16 object-cover rounded-lg"
-                                                />
+                                                <div className="w-16 h-16 relative rounded-lg overflow-hidden flex-shrink-0">
+                                                    <Image
+                                                        src={product.image_url}
+                                                        alt={product.name}
+                                                        fill
+                                                        sizes="64px"
+                                                        className="object-cover"
+                                                    />
+                                                </div>
                                             ) : (
-                                                <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center text-2xl">
+                                                <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center text-2xl flex-shrink-0">
                                                     📦
                                                 </div>
                                             )}

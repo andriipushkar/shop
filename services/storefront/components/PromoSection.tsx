@@ -45,9 +45,9 @@ export default function PromoSection() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
                 {/* Promo Banners */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {promoCards.map((card, index) => (
+                    {promoCards.map((card) => (
                         <Link
-                            key={index}
+                            key={`promo-${card.title}`}
                             href={card.link}
                             className={`${card.bgColor} rounded-2xl p-6 text-white relative overflow-hidden group card-hover`}
                         >
@@ -82,9 +82,9 @@ export default function PromoSection() {
                         </Link>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-                        {categories.map((category, index) => (
+                        {categories.map((category) => (
                             <Link
-                                key={index}
+                                key={`category-${category.name}`}
                                 href={category.link}
                                 className="bg-white rounded-2xl p-4 text-center hover:shadow-lg transition-all duration-300 border border-gray-100 group card-hover"
                             >

@@ -3,6 +3,8 @@
  * Supports order notifications, shipping updates, and promotional messages
  */
 
+import { logger } from './logger';
+
 // SMS Provider configuration
 export interface SMSConfig {
     provider: 'twilio' | 'messagebird' | 'turbosms' | 'mock';
@@ -79,11 +81,10 @@ export const smsTemplates = {
 
 // Mock SMS sender for development
 async function sendMockSMS(message: SMSMessage): Promise<SMSDeliveryStatus> {
-    console.log('[Mock SMS]', {
+    logger.debug('Sending mock SMS', {
         to: message.to,
         body: message.body,
         type: message.type,
-        timestamp: new Date().toISOString(),
     });
 
     return {
@@ -109,7 +110,7 @@ async function sendTwilioSMS(message: SMSMessage, config: SMSConfig): Promise<SM
     //     to: formattedPhone,
     // });
 
-    console.log('[Twilio SMS]', {
+    logger.debug('Sending Twilio SMS', {
         to: formattedPhone,
         from: config.senderId,
         body: message.body,
@@ -138,7 +139,7 @@ async function sendMessageBirdSMS(message: SMSMessage, config: SMSConfig): Promi
     //     body: message.body,
     // });
 
-    console.log('[MessageBird SMS]', {
+    logger.debug('Sending MessageBird SMS', {
         to: formattedPhone,
         from: config.senderId,
         body: message.body,
@@ -172,7 +173,7 @@ async function sendTurboSMS(message: SMSMessage, config: SMSConfig): Promise<SMS
     //     }),
     // });
 
-    console.log('[TurboSMS]', {
+    logger.debug('Sending TurboSMS', {
         to: formattedPhone,
         from: config.senderId,
         body: message.body,
@@ -191,7 +192,7 @@ export async function sendSMS(
     config: SMSConfig = defaultConfig
 ): Promise<SMSDeliveryStatus> {
     if (!config.enabled && config.provider !== 'mock') {
-        console.log('[SMS Disabled] Would send:', message);
+        logger.info('SMS disabled, would send message', { message });
         return {
             messageId: 'disabled',
             status: 'queued',
@@ -212,7 +213,7 @@ export async function sendSMS(
                 return await sendMockSMS(message);
         }
     } catch (error) {
-        console.error('[SMS Error]', error);
+        logger.error('SMS sending failed', error, { message });
         return {
             messageId: 'error',
             status: 'failed',

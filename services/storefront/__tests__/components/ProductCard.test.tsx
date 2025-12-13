@@ -278,7 +278,8 @@ describe('ProductCard', () => {
   describe('Image error handling', () => {
     it('handles image load error', () => {
       render(<ProductCard product={mockProduct} />);
-      const img = screen.getByAltText('Test Product');
+      // Alt text now includes price for SEO: "Test Product - купити в TechShop за 1 999 грн"
+      const img = screen.getByAltText(/Test Product - купити в TechShop/);
 
       fireEvent.error(img);
 

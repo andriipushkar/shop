@@ -1,90 +1,268 @@
-version: '3.8'
+version: '3.9'
+
+# ===========================================
+# Docker Compose for TechShop Storefront
+# Local Development & Production Setup
+# ===========================================
 
 services:
-  # Next.js application
+  # =========================================
+  # Next.js Application (Development)
+  # =========================================
   storefront:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
+      cache_from:
+        - storefront:dev
+    container_name: techshop-storefront-dev
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://api:8080
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/techshop
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/storefront?schema=public
       - REDIS_URL=redis://redis:6379
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-this-secret-in-production-min-32-chars}
+      - NEXT_PUBLIC_SITE_URL=http://localhost:3000
+      - NEXT_PUBLIC_SITE_NAME=TechShop
+      # OAuth (optional)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      # Monitoring
+      - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Mount source code for hot-reload
+      - .:/app
+      # Prevent node_modules and .next from being overwritten
+      - /app/node_modules
+      - /app/.next
     restart: unless-stopped
     networks:
-      - techshop-network
+      - storefront-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
 
-  # PostgreSQL database
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=techshop
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+  # =========================================
+  # Next.js Application (Production)
+  # =========================================
+  storefront-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+      cache_from:
+        - storefront:latest
+      args:
+        - NEXT_TELEMETRY_DISABLED=1
+    container_name: techshop-storefront-prod
     ports:
-      - "5432:5432"
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/storefront?schema=public}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3001}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-http://localhost:3001}
+      - NEXT_PUBLIC_SITE_NAME=${NEXT_PUBLIC_SITE_NAME:-TechShop}
+      # Monitoring
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
+      # Analytics
+      - NEXT_PUBLIC_GA_ID=${NEXT_PUBLIC_GA_ID:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     networks:
-      - techshop-network
+      - storefront-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    profiles:
+      - production
+
+  # =========================================
+  # PostgreSQL Database
+  # =========================================
+  db:
+    image: postgres:16-alpine
+    container_name: techshop-postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-storefront}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
+    networks:
+      - storefront-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-storefront}"]
+      interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    shm_size: 128mb
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=2MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
 
-  # Redis for caching and sessions
+  # =========================================
+  # Redis Cache & Session Store
+  # =========================================
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes
+    container_name: techshop-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --save 300 100
+      --save 900 10
+      --tcp-backlog 511
+      --timeout 0
+      --tcp-keepalive 300
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     restart: unless-stopped
     networks:
-      - techshop-network
+      - storefront-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
+      interval: 5s
+      timeout: 3s
       retries: 5
+      start_period: 5s
 
-  # Nginx reverse proxy (production)
+  # =========================================
+  # Adminer - Database Management UI
+  # =========================================
+  adminer:
+    image: adminer:latest
+    container_name: techshop-adminer
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=db
+      - ADMINER_DESIGN=nette
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - storefront-network
+    profiles:
+      - tools
+
+  # =========================================
+  # Redis Commander - Redis Management UI
+  # =========================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: techshop-redis-commander
+    ports:
+      - "${REDIS_COMMANDER_PORT:-8081}:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=${REDIS_COMMANDER_USER:-admin}
+      - HTTP_PASSWORD=${REDIS_COMMANDER_PASSWORD:-admin}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - storefront-network
+    profiles:
+      - tools
+
+  # =========================================
+  # Nginx Reverse Proxy (Production)
+  # =========================================
   nginx:
     image: nginx:alpine
+    container_name: techshop-nginx
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+      - nginx_logs:/var/log/nginx
     depends_on:
-      - storefront
+      - storefront-prod
     restart: unless-stopped
     networks:
-      - techshop-network
+      - storefront-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     profiles:
       - production
 
+# =========================================
+# Volumes for data persistence
+# =========================================
 volumes:
   postgres_data:
+    driver: local
+    name: techshop_postgres_data
   redis_data:
+    driver: local
+    name: techshop_redis_data
+  nginx_cache:
+    driver: local
+    name: techshop_nginx_cache
+  nginx_logs:
+    driver: local
+    name: techshop_nginx_logs
 
+# =========================================
+# Networks
+# =========================================
 networks:
-  techshop-network:
+  storefront-network:
     driver: bridge
+    name: techshop_network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

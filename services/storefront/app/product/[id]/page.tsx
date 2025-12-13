@@ -10,6 +10,9 @@ import { useComparison } from '@/lib/comparison-context'
 import { useRecentlyViewed } from '@/lib/recently-viewed-context'
 import ProductReviews from '@/components/ProductReviews'
 import RecentlyViewed from '@/components/RecentlyViewed'
+import ProductJsonLd, { ExtendedProductJsonLd, PinterestMeta } from '@/components/ProductJsonLd'
+import Breadcrumb from '@/components/Breadcrumb'
+import RelatedProducts, { CrossSellProducts } from '@/components/RelatedProducts'
 import {
   ShoppingCartIcon,
   HeartIcon,
@@ -476,17 +479,53 @@ export default function ProductPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {/* Structured Data - Extended Product JSON-LD with warranty, shipping, returns */}
+      <ExtendedProductJsonLd
+        product={{
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          price: currentPrice,
+          compare_price: currentComparePrice,
+          sku: currentVariant?.sku || product.sku,
+          stock: currentVariant?.stock ?? product.stock,
+          brand: product.brand,
+          images: product.images,
+          category: product.category,
+          rating: product.rating,
+          reviewCount: product.reviews_count,
+        }}
+        warranty={{
+          durationMonths: 12,
+          type: 'manufacturer',
+        }}
+        shipping={{
+          freeShippingThreshold: 2000,
+          deliveryDays: { min: 1, max: 3 },
+        }}
+        returnPolicy={{
+          days: 14,
+          type: 'full',
+        }}
+      />
+      {/* Pinterest Rich Pins metadata */}
+      <PinterestMeta
+        product={{
+          name: product.name,
+          price: currentPrice,
+          availability: currentStock > 0 ? 'in stock' : 'out of stock',
+          brand: product.brand,
+        }}
+      />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Breadcrumb */}
-        <nav className="flex items-center space-x-2 text-sm text-gray-500 mb-6">
-          <Link href="/" className="hover:text-primary-600">Головна</Link>
-          <span>/</span>
-          <Link href={`/?category_id=${product.category.id}`} className="hover:text-primary-600">
-            {product.category.name}
-          </Link>
-          <span>/</span>
-          <span className="text-gray-900">{product.name}</span>
-        </nav>
+        {/* Breadcrumb with JSON-LD */}
+        <Breadcrumb
+          items={[
+            { name: product.category.name, url: `/category/${product.category.id}` },
+            { name: product.name, url: `/product/${product.id}` },
+          ]}
+          className="mb-6"
+        />
 
         <button
           onClick={() => router.back()}
@@ -918,6 +957,27 @@ export default function ProductPage() {
         <div className="mt-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Відгуки покупців</h2>
           <ProductReviews productId={product.id} />
+        </div>
+
+        {/* Related Products Section - improves internal linking for SEO */}
+        <div className="mt-12">
+          <RelatedProducts
+            currentProductId={product.id}
+            categoryId={product.category.id}
+            brand={product.brand}
+            maxProducts={4}
+            title="Схожі товари"
+            viewAllLink={`/category/${product.category.id}`}
+          />
+        </div>
+
+        {/* Cross-sell Section - shows complementary products */}
+        <div className="mt-8">
+          <CrossSellProducts
+            currentProductId={product.id}
+            categoryId={product.category.id}
+            maxProducts={4}
+          />
         </div>
 
         {/* Recently Viewed Section */}

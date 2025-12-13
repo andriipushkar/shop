@@ -7,6 +7,7 @@ import {
     CheckIcon,
     XMarkIcon,
 } from '@heroicons/react/24/outline';
+import { logger } from '@/lib/logger';
 
 interface SocialShareProps {
     url: string;
@@ -93,7 +94,7 @@ export default function SocialShare({ url, title, description, image, price, com
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
-            console.error('Failed to copy:', err);
+            logger.error('Failed to copy:', err);
         }
     };
 
@@ -153,13 +154,21 @@ export default function SocialShare({ url, title, description, image, price, com
             {showModal && (
                 <div className="fixed inset-0 z-50 overflow-y-auto">
                     <div className="flex items-center justify-center min-h-screen px-4">
-                        <div className="fixed inset-0 bg-black/50" onClick={() => setShowModal(false)} />
+                        <div
+                        className="fixed inset-0 bg-black/50"
+                        onClick={() => setShowModal(false)}
+                        onKeyDown={(e) => e.key === 'Escape' && setShowModal(false)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Закрити"
+                    />
                         <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-semibold text-gray-900">Поділитись</h3>
                                 <button
                                     onClick={() => setShowModal(false)}
                                     className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+                                    aria-label="Закрити модальне вікно"
                                 >
                                     <XMarkIcon className="w-5 h-5" />
                                 </button>

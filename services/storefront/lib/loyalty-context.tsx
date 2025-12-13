@@ -110,7 +110,6 @@ const LoyaltyContext = createContext<LoyaltyContextType | undefined>(undefined);
 // Mock account
 const mockAccount: LoyaltyAccount = {
     id: '1',
-    visibleAt: '',
     userId: '1',
     currentPoints: 2450,
     lifetimePoints: 8750,
@@ -307,7 +306,6 @@ export function LoyaltyProvider({ children }: { children: ReactNode }) {
     const initializeAccount = useCallback((userId: string) => {
         const newAccount: LoyaltyAccount = {
             id: Date.now().toString(),
-            visibleAt: '',
             userId,
             currentPoints: 0,
             lifetimePoints: 0,

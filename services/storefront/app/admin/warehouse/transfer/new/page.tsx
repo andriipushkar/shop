@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { logger } from '@/lib/logger';
 import {
     ArrowLeftIcon,
     ArrowsRightLeftIcon,
@@ -147,7 +148,7 @@ export default function NewTransferPage() {
             status,
             totalQuantity,
         };
-        console.log('Transfer:', transfer);
+        logger.info('Transfer created', { transfer });
 
         const statusText = {
             draft: 'збережено як чернетку',

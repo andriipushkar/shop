@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { logger } from '@/lib/logger';
 import {
   CameraIcon,
   XMarkIcon,
@@ -74,7 +75,7 @@ export default function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScann
         setIsScanning(true);
       }
     } catch (err) {
-      console.error('Camera error:', err);
+      logger.error('Camera error', err);
       if (err instanceof Error) {
         if (err.name === 'NotAllowedError') {
           setError('Доступ до камери заборонено. Надайте дозвіл у налаштуваннях браузера.');

@@ -200,10 +200,11 @@ describe('LiqPay Service', () => {
 
   describe('PAYMENT_METHODS', () => {
     it('should have all payment methods defined', () => {
-      expect(PAYMENT_METHODS.length).toBe(3);
+      expect(PAYMENT_METHODS.length).toBe(4);
 
       const ids = PAYMENT_METHODS.map(m => m.id);
       expect(ids).toContain('liqpay');
+      expect(ids).toContain('monobank');
       expect(ids).toContain('cash');
       expect(ids).toContain('cod');
     });

@@ -791,6 +791,10 @@ export function getCategoryById(id: string): Category | undefined {
     return categories.find(c => c.id === id);
 }
 
+export function getCategoryBySlug(slug: string): Category | undefined {
+    return categories.find(c => c.slug === slug);
+}
+
 export function getSubcategories(parentId: string): Category[] {
     return categories.filter(c => c.parentId === parentId);
 }

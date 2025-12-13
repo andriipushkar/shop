@@ -23,6 +23,7 @@ import {
   getCategoryById,
   Product,
 } from '@/lib/mock-data'
+import Breadcrumb from '@/components/Breadcrumb'
 
 type SortOption = 'popular' | 'price_asc' | 'price_desc' | 'rating' | 'new'
 type AttributeType = 'select' | 'multiselect' | 'bool' | 'color' | 'range' | 'number'
@@ -406,27 +407,28 @@ export default function CategoryPage() {
     )
   }
 
+  // Build breadcrumb items
+  const breadcrumbItems = [];
+  if (category?.parentId) {
+    const parentCategory = getCategoryById(category.parentId);
+    if (parentCategory) {
+      breadcrumbItems.push({
+        name: parentCategory.name,
+        url: `/category/${parentCategory.slug}`,
+      });
+    }
+  }
+  breadcrumbItems.push({
+    name: categoryName,
+    url: `/category/${slug}`,
+  });
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Breadcrumb */}
+      {/* Breadcrumb with JSON-LD */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <nav className="flex items-center space-x-2 text-sm">
-            <Link href="/" className="text-gray-500 hover:text-gray-700">Головна</Link>
-            <span className="text-gray-400">/</span>
-            {category?.parentId && (
-              <>
-                <Link
-                  href={`/category/${getCategoryById(category.parentId)?.slug}`}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  {getCategoryById(category.parentId)?.name}
-                </Link>
-                <span className="text-gray-400">/</span>
-              </>
-            )}
-            <span className="text-gray-900 font-medium">{categoryName}</span>
-          </nav>
+          <Breadcrumb items={breadcrumbItems} />
         </div>
       </div>
 

@@ -1,0 +1,117 @@
+version: '3.9'
+
+# ===========================================
+# Docker Compose for Testing
+# Lightweight setup for CI/CD and local testing
+# ===========================================
+
+services:
+  # =========================================
+  # PostgreSQL Test Database
+  # =========================================
+  db-test:
+    image: postgres:16-alpine
+    container_name: storefront-test-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=storefront_test
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+    tmpfs:
+      - /var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d storefront_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
+    networks:
+      - test-network
+
+  # =========================================
+  # Redis Test Cache
+  # =========================================
+  redis-test:
+    image: redis:7-alpine
+    container_name: storefront-test-redis
+    command: redis-server --save "" --appendonly no
+    tmpfs:
+      - /data
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+      start_period: 2s
+    networks:
+      - test-network
+
+  # =========================================
+  # Test Runner
+  # =========================================
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: storefront-test-runner
+    environment:
+      - NODE_ENV=test
+      - DATABASE_URL=postgresql://postgres:postgres@db-test:5432/storefront_test
+      - REDIS_URL=redis://redis-test:6379
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=test-secret-min-32-characters-long-for-testing
+      - CI=true
+    depends_on:
+      db-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    volumes:
+      - ./coverage:/app/coverage
+      - ./test-results:/app/test-results
+    command: npm run test:coverage
+    networks:
+      - test-network
+    profiles:
+      - test
+
+  # =========================================
+  # E2E Test Runner
+  # =========================================
+  e2e-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: storefront-e2e-runner
+    environment:
+      - NODE_ENV=test
+      - DATABASE_URL=postgresql://postgres:postgres@db-test:5432/storefront_test
+      - REDIS_URL=redis://redis-test:6379
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=test-secret-min-32-characters-long-for-testing
+      - BASE_URL=http://localhost:3000
+      - CI=true
+    depends_on:
+      db-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    volumes:
+      - ./playwright-report:/app/playwright-report
+      - ./test-results:/app/test-results
+    command: npx playwright test
+    networks:
+      - test-network
+    profiles:
+      - e2e
+
+networks:
+  test-network:
+    driver: bridge
+    name: storefront_test_network

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyCallback, parseCallbackData, isPaymentSuccessful, isPaymentFailed } from '@/lib/liqpay';
-import { sendShippingNotification } from '@/lib/email';
+import { verifyCallback, parseCallbackData, isPaymentSuccessful, isPaymentFailed, type LiqPayStatus } from '@/lib/liqpay';
+import { prisma } from '@/lib/db/prisma';
+import type { PaymentStatus } from '@prisma/client';
+import { apiLogger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +20,7 @@ export async function POST(request: NextRequest) {
     // Verify the callback signature
     const isValid = verifyCallback(data, signature);
     if (!isValid) {
-      console.error('LiqPay callback: Invalid signature');
+      apiLogger.error('LiqPay callback: Invalid signature');
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 403 }
@@ -36,40 +38,87 @@ export async function POST(request: NextRequest) {
 
     const { order_id, status, amount, payment_id } = callbackData;
 
-    console.log('LiqPay callback received:', {
+    apiLogger.info('LiqPay callback received:', {
       order_id,
       status,
       amount,
       payment_id,
     });
 
-    // Handle payment status
-    if (isPaymentSuccessful(status)) {
-      // Update order status in database
-      // In production, this would call your order service
-      console.log(`Payment successful for order ${order_id}`);
+    // Map LiqPay status to our payment status
+    const mapPaymentStatus = (liqpayStatus: LiqPayStatus): PaymentStatus => {
+      if (isPaymentSuccessful(liqpayStatus)) return 'PAID';
+      if (isPaymentFailed(liqpayStatus)) return 'FAILED';
+      return 'PENDING';
+    };
 
-      // TODO: Update order payment_status to 'paid' in database
-      // await updateOrderPaymentStatus(order_id, 'paid', payment_id);
+    const paymentStatus = mapPaymentStatus(status);
 
-      // Send notification email
-      // Note: In production, you'd fetch order details from database
-      // and send proper email notification
+    // Find order by order number
+    const order = await prisma.order.findUnique({
+      where: { orderNumber: order_id },
+    });
 
-    } else if (isPaymentFailed(status)) {
-      console.log(`Payment failed for order ${order_id}`);
-      // TODO: Update order payment_status to 'failed' in database
-      // await updateOrderPaymentStatus(order_id, 'failed', payment_id);
-    } else {
-      // Payment is pending or in other intermediate state
-      console.log(`Payment status ${status} for order ${order_id}`);
-      // TODO: Update order payment_status accordingly
-      // await updateOrderPaymentStatus(order_id, status, payment_id);
+    if (!order) {
+      apiLogger.error(`Order not found: ${order_id}`);
+      return NextResponse.json(
+        { error: 'Order not found' },
+        { status: 404 }
+      );
     }
+
+    // Convert payment_id to string
+    const paymentIdStr = payment_id ? String(payment_id) : null;
+
+    // Update order payment status
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        paymentStatus,
+        paymentId: paymentIdStr,
+        // If paid, confirm the order
+        ...(paymentStatus === 'PAID' && order.status === 'PENDING'
+          ? { status: 'CONFIRMED' }
+          : {}),
+      },
+    });
+
+    // Create or update payment record
+    const paymentRecordId = paymentIdStr || `liqpay-${order_id}`;
+    await prisma.payment.upsert({
+      where: {
+        id: paymentRecordId,
+      },
+      create: {
+        id: paymentRecordId,
+        orderId: order.id,
+        amount: amount,
+        method: 'liqpay',
+        status: paymentStatus,
+        transactionId: paymentIdStr,
+        metadata: callbackData as object,
+      },
+      update: {
+        status: paymentStatus,
+        transactionId: paymentIdStr,
+        metadata: callbackData as object,
+      },
+    });
+
+    // Create order history entry
+    await prisma.orderHistory.create({
+      data: {
+        orderId: order.id,
+        status: order.status,
+        comment: `Статус оплати: ${paymentStatus}. LiqPay ID: ${paymentIdStr || 'N/A'}`,
+      },
+    });
+
+    apiLogger.info(`Order ${order_id} payment status updated to ${paymentStatus}`);
 
     return NextResponse.json({ status: 'ok' });
   } catch (error) {
-    console.error('LiqPay callback error:', error);
+    apiLogger.error('LiqPay callback error', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

@@ -155,7 +155,9 @@ describe('ProductPage', () => {
 
     it('renders stock status', () => {
       render(<ProductPage />);
-      expect(screen.getByText(/В наявності/)).toBeInTheDocument();
+      // Multiple stock status elements may be present (product page + related products)
+      const stockElements = screen.getAllByText(/В наявності/);
+      expect(stockElements.length).toBeGreaterThan(0);
     });
   });
 
@@ -301,7 +303,8 @@ describe('ProductPage', () => {
   describe('Navigation', () => {
     it('renders breadcrumb navigation', () => {
       render(<ProductPage />);
-      expect(screen.getByText('Головна')).toBeInTheDocument();
+      // Breadcrumb uses HomeIcon with aria-label for "Головна", not text
+      expect(screen.getByLabelText('Хлібні крихти')).toBeInTheDocument();
       expect(screen.getByText('Смартфони')).toBeInTheDocument();
     });
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiLogger } from '@/lib/logger';
 
 const CORE_URL = process.env.CORE_SERVICE_URL || 'http://core:8080';
 
@@ -19,7 +20,7 @@ export async function DELETE(
 
         return new NextResponse(null, { status: 204 });
     } catch (error) {
-        console.error('Error removing from cart:', error);
+        apiLogger.error('Error removing from cart:', error);
         return NextResponse.json({ error: 'Failed to remove item' }, { status: 500 });
     }
 }
@@ -47,7 +48,7 @@ export async function PATCH(
         const data = await res.json();
         return NextResponse.json(data);
     } catch (error) {
-        console.error('Error updating cart item:', error);
+        apiLogger.error('Error updating cart item:', error);
         return NextResponse.json({ error: 'Failed to update item' }, { status: 500 });
     }
 }
