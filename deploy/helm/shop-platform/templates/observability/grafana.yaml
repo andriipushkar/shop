@@ -1,0 +1,389 @@
+{{- if .Values.observability.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: {{ .Release.Namespace }}
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+        editable: false
+        jsonData:
+          maxLines: 1000
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: {{ .Release.Namespace }}
+data:
+  default.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: {{ .Release.Namespace }}
+data:
+  # Multi-Tenant Overview Dashboard
+  multi-tenant-overview.json: |
+    {
+      "title": "Multi-Tenant Overview",
+      "uid": "multi-tenant-overview",
+      "panels": [
+        {
+          "title": "Active Tenants",
+          "type": "stat",
+          "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+          "targets": [
+            {
+              "expr": "count(count by (tenant_id) (http_requests_total{tenant_id!=\"\"}))",
+              "legendFormat": "Active Tenants"
+            }
+          ]
+        },
+        {
+          "title": "Requests by Tenant (Top 10)",
+          "type": "bargauge",
+          "gridPos": {"x": 6, "y": 0, "w": 18, "h": 8},
+          "targets": [
+            {
+              "expr": "topk(10, sum by (tenant_id) (rate(http_requests_total[5m])))",
+              "legendFormat": "{{ "{{" }}tenant_id{{ "}}" }}"
+            }
+          ]
+        },
+        {
+          "title": "Error Rate by Tenant",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "sum by (tenant_id) (rate(http_requests_total{status=~\"5..\"}[5m])) / sum by (tenant_id) (rate(http_requests_total[5m])) * 100",
+              "legendFormat": "{{ "{{" }}tenant_id{{ "}}" }}"
+            }
+          ]
+        },
+        {
+          "title": "Latency p99 by Tenant",
+          "type": "timeseries",
+          "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, sum by (tenant_id, le) (rate(http_request_duration_seconds_bucket[5m])))",
+              "legendFormat": "{{ "{{" }}tenant_id{{ "}}" }}"
+            }
+          ]
+        },
+        {
+          "title": "Tenant Logs (Recent Errors)",
+          "type": "logs",
+          "gridPos": {"x": 0, "y": 16, "w": 24, "h": 8},
+          "datasource": "Loki",
+          "targets": [
+            {
+              "expr": "{app=\"shop-core\"} |= \"error\" | json | line_format \"{{ "{{" }}.tenant_id{{ "}}" }}: {{ "{{" }}.msg{{ "}}" }}\""
+            }
+          ]
+        }
+      ],
+      "templating": {
+        "list": [
+          {
+            "name": "tenant_id",
+            "type": "query",
+            "datasource": "Prometheus",
+            "query": "label_values(http_requests_total, tenant_id)",
+            "includeAll": true,
+            "multi": true
+          }
+        ]
+      }
+    }
+
+  # API Performance Dashboard
+  api-performance.json: |
+    {
+      "title": "API Performance",
+      "uid": "api-performance",
+      "panels": [
+        {
+          "title": "Request Rate",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total[5m])) by (method, path)",
+              "legendFormat": "{{ "{{" }}method{{ "}}" }} {{ "{{" }}path{{ "}}" }}"
+            }
+          ]
+        },
+        {
+          "title": "Response Time Distribution",
+          "type": "heatmap",
+          "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_seconds_bucket[5m])) by (le)",
+              "format": "heatmap"
+            }
+          ]
+        },
+        {
+          "title": "Error Rate",
+          "type": "stat",
+          "gridPos": {"x": 0, "y": 8, "w": 6, "h": 4},
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100",
+              "legendFormat": "Error %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 5}
+                ]
+              },
+              "unit": "percent"
+            }
+          }
+        },
+        {
+          "title": "Slowest Endpoints",
+          "type": "table",
+          "gridPos": {"x": 6, "y": 8, "w": 18, "h": 8},
+          "targets": [
+            {
+              "expr": "topk(10, histogram_quantile(0.99, sum by (path, le) (rate(http_request_duration_seconds_bucket[5m]))))",
+              "format": "table",
+              "instant": true
+            }
+          ]
+        }
+      ]
+    }
+
+  # Billing & Usage Dashboard
+  billing-usage.json: |
+    {
+      "title": "Billing & Usage",
+      "uid": "billing-usage",
+      "panels": [
+        {
+          "title": "MRR by Plan",
+          "type": "piechart",
+          "gridPos": {"x": 0, "y": 0, "w": 8, "h": 8},
+          "targets": [
+            {
+              "expr": "sum by (plan) (tenant_subscription_mrr)",
+              "legendFormat": "{{ "{{" }}plan{{ "}}" }}"
+            }
+          ]
+        },
+        {
+          "title": "Product Usage vs Limit",
+          "type": "bargauge",
+          "gridPos": {"x": 8, "y": 0, "w": 16, "h": 8},
+          "targets": [
+            {
+              "expr": "topk(20, tenant_product_count / tenant_product_limit * 100)",
+              "legendFormat": "{{ "{{" }}tenant_id{{ "}}" }}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "red", "value": 90}
+                ]
+              },
+              "max": 100,
+              "unit": "percent"
+            }
+          }
+        },
+        {
+          "title": "Tenants Approaching Limits",
+          "type": "table",
+          "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8},
+          "targets": [
+            {
+              "expr": "tenant_product_count / tenant_product_limit > 0.8",
+              "format": "table",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "title": "Past Due Subscriptions",
+          "type": "stat",
+          "gridPos": {"x": 0, "y": 16, "w": 8, "h": 4},
+          "targets": [
+            {
+              "expr": "count(tenant_subscription_status == 2)",
+              "legendFormat": "Past Due"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": 1}
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.2.0
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-secrets
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-secrets
+                  key: admin-password
+            - name: GF_INSTALL_PLUGINS
+              value: grafana-piechart-panel
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: storage
+              mountPath: /var/lib/grafana
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboards-provider
+          configMap:
+            name: grafana-dashboards-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: storage
+          persistentVolumeClaim:
+            claimName: grafana-storage
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-storage
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
+
+---
+# Ingress for Grafana
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-security-headers@kubernetescrd
+spec:
+  rules:
+    - host: grafana.{{ .Values.domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000
+  tls:
+    - hosts:
+        - grafana.{{ .Values.domain }}
+      secretName: grafana-tls
+{{- end }}

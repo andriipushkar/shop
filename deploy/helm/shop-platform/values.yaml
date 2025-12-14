@@ -354,3 +354,87 @@ networkPolicies:
   enabled: true
   # Allow traffic only between shop services
   allowInternalOnly: true
+
+# ==================== OBSERVABILITY (Loki + Grafana) ====================
+
+observability:
+  enabled: true
+
+  # Loki for log aggregation
+  loki:
+    enabled: true
+    storage: 50Gi
+    retention: 168h  # 7 days
+    ingestion:
+      rateMB: 10
+      burstMB: 15
+
+  # Promtail for log collection
+  promtail:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  # Grafana dashboards
+  grafana:
+    enabled: true
+    storage: 5Gi
+    dashboards:
+      - multi-tenant-overview
+      - api-performance
+      - billing-usage
+      - fraud-detection
+      - visual-search
+
+  # Alerting rules
+  alerts:
+    enabled: true
+    rules:
+      # High error rate
+      - name: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for 5 minutes"
+
+      # Tenant approaching limits
+      - name: TenantApproachingProductLimit
+        expr: tenant_product_count / tenant_product_limit > 0.9
+        for: 1h
+        severity: warning
+        annotations:
+          summary: "Tenant approaching product limit"
+          description: "Tenant {{ $labels.tenant_id }} has used 90%+ of product quota"
+
+      # Past due subscription
+      - name: SubscriptionPastDue
+        expr: tenant_subscription_status == 2
+        for: 24h
+        severity: warning
+        annotations:
+          summary: "Subscription past due"
+          description: "Tenant {{ $labels.tenant_id }} has overdue subscription"
+
+      # Pod memory high
+      - name: PodMemoryHigh
+        expr: |
+          container_memory_usage_bytes{pod=~"shop-.*"}
+          / container_spec_memory_limit_bytes > 0.85
+        for: 10m
+        severity: warning
+
+# ==================== ENVIRONMENT ====================
+
+environment: production  # development | staging | production
+
+# Domain for all services
+domain: shop.com
