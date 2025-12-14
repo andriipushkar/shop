@@ -1,0 +1,164 @@
+{{- if .Values.rateLimiting.enabled }}
+# Global Rate Limiter - Per IP for anonymous users
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-ratelimit-anonymous
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  rateLimit:
+    average: {{ .Values.rateLimiting.anonymous.requestsPerSecond }}
+    burst: {{ .Values.rateLimiting.anonymous.burstSize }}
+    period: 1s
+    sourceCriterion:
+      ipStrategy:
+        depth: 1
+---
+# Per Tenant Rate Limiter - Uses X-Tenant-ID header
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-ratelimit-tenant
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  rateLimit:
+    average: {{ .Values.rateLimiting.tenant.requestsPerSecond }}
+    burst: {{ .Values.rateLimiting.tenant.burstSize }}
+    period: 1s
+    sourceCriterion:
+      requestHeaderName: X-Tenant-ID
+---
+# API Rate Limiter
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-ratelimit-api
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  rateLimit:
+    average: {{ div .Values.rateLimiting.api.requestsPerMinute 60 }}
+    burst: {{ .Values.rateLimiting.api.burstSize }}
+    period: 1s
+    sourceCriterion:
+      requestHeaderName: Authorization
+---
+# Circuit Breaker for backend protection
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-circuit-breaker
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  circuitBreaker:
+    expression: ResponseCodeRatio(500, 600, 0, 600) > 0.30 || NetworkErrorRatio() > 0.10
+    checkPeriod: 10s
+    fallbackDuration: 30s
+    recoveryDuration: 60s
+---
+# Retry middleware for transient failures
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-retry
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  retry:
+    attempts: 3
+    initialInterval: 100ms
+---
+# Compress responses
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-compress
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  compress:
+    excludedContentTypes:
+      - text/event-stream
+---
+# Security headers
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-security-headers
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  headers:
+    frameDeny: true
+    sslRedirect: true
+    browserXssFilter: true
+    contentTypeNosniff: true
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+    customFrameOptionsValue: "SAMEORIGIN"
+    referrerPolicy: "strict-origin-when-cross-origin"
+    customResponseHeaders:
+      X-Robots-Tag: "noindex, nofollow"
+---
+# Strip prefix for API versioning
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-strip-api-prefix
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /api/v1
+      - /api/v2
+---
+# Tenant header injection from subdomain
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-tenant-header
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  plugin:
+    tenantHeader:
+      headerName: X-Tenant-ID
+      # Extracts tenant from subdomain: {tenant}.shop.com -> tenant
+      regex: "^([^.]+)\\.{{ .Values.global.domain | replace "." "\\." }}$"
+---
+# Combined middleware chain for API
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-api-chain
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  chain:
+    middlewares:
+      - name: {{ include "shop-platform.fullname" . }}-security-headers
+      - name: {{ include "shop-platform.fullname" . }}-ratelimit-tenant
+      - name: {{ include "shop-platform.fullname" . }}-circuit-breaker
+      - name: {{ include "shop-platform.fullname" . }}-retry
+      - name: {{ include "shop-platform.fullname" . }}-compress
+---
+# Combined middleware chain for Storefront
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "shop-platform.fullname" . }}-storefront-chain
+  labels:
+    {{- include "shop-platform.labels" . | nindent 4 }}
+spec:
+  chain:
+    middlewares:
+      - name: {{ include "shop-platform.fullname" . }}-security-headers
+      - name: {{ include "shop-platform.fullname" . }}-ratelimit-anonymous
+      - name: {{ include "shop-platform.fullname" . }}-tenant-header
+      - name: {{ include "shop-platform.fullname" . }}-compress
+{{- end }}

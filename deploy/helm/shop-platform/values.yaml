@@ -1,0 +1,356 @@
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+  # Domain configuration
+  domain: shop.com
+
+  # Tenant configuration
+  tenantIsolation: database  # database | schema | rls
+
+  # Feature flags
+  features:
+    visualSearch: true
+    fraudDetection: true
+    cdp: true
+    rma: true
+    unifiedInbox: true
+
+# ==================== SERVICES ====================
+
+# Core API Service
+core:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: shop/core
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  env:
+    - name: LOG_LEVEL
+      value: "info"
+    - name: ENABLE_TRACING
+      value: "true"
+
+# OMS Service
+oms:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: shop/oms
+    tag: latest
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  service:
+    port: 8081
+
+# CRM Service
+crm:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: shop/crm
+    tag: latest
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  service:
+    port: 8082
+
+# Notification Service
+notification:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: shop/notification
+    tag: latest
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  service:
+    port: 8083
+
+# Storefront (Next.js)
+storefront:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: shop/storefront
+    tag: latest
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  service:
+    port: 3000
+
+# Admin Panel
+admin:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: shop/admin
+    tag: latest
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  service:
+    port: 3001
+
+# Telegram Bot
+telegramBot:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: shop/telegram-bot
+    tag: latest
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+# ==================== INFRASTRUCTURE ====================
+
+# PostgreSQL
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: ""  # Set via secret
+    database: shop
+  primary:
+    persistence:
+      size: 50Gi
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+  # Enable pgvector extension
+  primary:
+    initdb:
+      scripts:
+        init-extensions.sql: |
+          CREATE EXTENSION IF NOT EXISTS vector;
+          CREATE EXTENSION IF NOT EXISTS pg_trgm;
+          CREATE EXTENSION IF NOT EXISTS btree_gin;
+
+# Redis
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: ""  # Set via secret
+  master:
+    persistence:
+      size: 10Gi
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+# RabbitMQ
+rabbitmq:
+  enabled: true
+  auth:
+    username: shop
+    password: ""  # Set via secret
+  persistence:
+    size: 10Gi
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Elasticsearch
+elasticsearch:
+  enabled: true
+  master:
+    replicaCount: 1
+    persistence:
+      size: 30Gi
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+
+# Qdrant (Vector Database for Visual Search)
+qdrant:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: qdrant/qdrant
+    tag: latest
+  persistence:
+    size: 20Gi
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  service:
+    port: 6333
+
+# ==================== INGRESS ====================
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+
+  # Wildcard for tenant subdomains
+  hosts:
+    - host: "*.shop.com"
+      paths:
+        - path: /
+          pathType: Prefix
+          service: storefront
+    - host: "admin.shop.com"
+      paths:
+        - path: /
+          pathType: Prefix
+          service: admin
+    - host: "api.shop.com"
+      paths:
+        - path: /
+          pathType: Prefix
+          service: core
+
+  tls:
+    - secretName: shop-tls
+      hosts:
+        - "*.shop.com"
+        - "shop.com"
+
+# ==================== RATE LIMITING ====================
+
+rateLimiting:
+  enabled: true
+  # Per tenant limits
+  tenant:
+    requestsPerSecond: 100
+    burstSize: 200
+  # Per IP limits (unauthenticated)
+  anonymous:
+    requestsPerSecond: 10
+    burstSize: 20
+  # API limits
+  api:
+    requestsPerMinute: 1000
+    burstSize: 100
+
+# ==================== MONITORING ====================
+
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+
+  grafana:
+    enabled: false  # Use external Grafana
+    dashboards:
+      - tenant-metrics
+      - api-performance
+      - fraud-detection
+
+  alerting:
+    enabled: true
+    rules:
+      - name: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 5m
+        severity: critical
+      - name: HighLatency
+        expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        severity: warning
+
+# ==================== SECRETS ====================
+
+secrets:
+  # These should be provided via external secret management (Vault, AWS Secrets Manager, etc.)
+  create: false
+  externalSecretRef: shop-secrets
+
+# ==================== SERVICE ACCOUNT ====================
+
+serviceAccount:
+  create: true
+  name: shop-platform
+  annotations: {}
+
+# ==================== POD DISRUPTION BUDGET ====================
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ==================== NETWORK POLICIES ====================
+
+networkPolicies:
+  enabled: true
+  # Allow traffic only between shop services
+  allowInternalOnly: true
