@@ -1,0 +1,433 @@
+# FinOps: Spot Instance Workload Configuration
+# Configures stateless workloads to run on spot instances (70% savings)
+
+---
+# =============================================================================
+# PRIORITY CLASSES
+# =============================================================================
+
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: critical-priority
+value: 1000000
+globalDefault: false
+description: "Critical workloads that should never be preempted (databases, payments)"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+value: 100000
+globalDefault: false
+description: "High priority workloads (API gateways, core services)"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: standard-priority
+value: 10000
+globalDefault: true
+description: "Standard workloads (most services)"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+value: 1000
+globalDefault: false
+description: "Low priority workloads (batch jobs, analytics)"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: preemptible-priority
+value: 100
+globalDefault: false
+preemptionPolicy: Never
+description: "Preemptible workloads that can be evicted anytime"
+
+---
+# =============================================================================
+# POD TEMPLATES FOR SPOT INSTANCES
+# =============================================================================
+
+# Template: Spot-tolerant stateless workload
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spot-workload-templates
+  namespace: default
+  labels:
+    app.kubernetes.io/name: finops
+    app.kubernetes.io/component: templates
+data:
+  stateless-spot.yaml: |
+    # Add these to your Deployment spec.template.spec:
+    tolerations:
+      - key: "cloud.google.com/gke-spot"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: node-type
+                  operator: In
+                  values:
+                    - spot
+          - weight: 50
+            preference:
+              matchExpressions:
+                - key: cloud.google.com/gke-spot
+                  operator: In
+                  values:
+                    - "true"
+    # Graceful shutdown for spot preemption
+    terminationGracePeriodSeconds: 30
+
+  analytics-spot.yaml: |
+    tolerations:
+      - key: "cloud.google.com/gke-spot"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      - key: "workload"
+        operator: "Equal"
+        value: "analytics"
+        effect: "NoSchedule"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: workload
+                  operator: In
+                  values:
+                    - analytics
+
+  ai-spot.yaml: |
+    tolerations:
+      - key: "cloud.google.com/gke-spot"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      - key: "workload"
+        operator: "Equal"
+        value: "ai"
+        effect: "NoSchedule"
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: workload
+                  operator: In
+                  values:
+                    - ai
+
+---
+# =============================================================================
+# EXAMPLE: API SERVICE ON SPOT INSTANCES
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway-spot
+  namespace: shop
+  labels:
+    app: api-gateway
+    cost-optimization: spot
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        cost-optimization: spot
+    spec:
+      # Use standard priority - can be preempted by higher priority
+      priorityClassName: standard-priority
+
+      # Tolerate spot nodes
+      tolerations:
+        - key: "cloud.google.com/gke-spot"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+
+      # Prefer spot nodes, fallback to on-demand
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-type
+                    operator: In
+                    values:
+                      - spot
+        # Spread across zones for availability
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: api-gateway
+                topologyKey: topology.kubernetes.io/zone
+
+      # Graceful shutdown on preemption
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: api-gateway
+          image: shop/api-gateway:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+
+          # Readiness probe - important for graceful shutdown
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+          # Lifecycle hooks for graceful shutdown
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    # Stop accepting new requests
+                    kill -SIGTERM 1
+                    # Wait for in-flight requests to complete
+                    sleep 25
+
+---
+# =============================================================================
+# EXAMPLE: CRITICAL SERVICE ON ON-DEMAND (Payment)
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: shop
+  labels:
+    app: payment-service
+    cost-optimization: on-demand
+    criticality: high
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+        cost-optimization: on-demand
+    spec:
+      # Critical priority - never preempted
+      priorityClassName: critical-priority
+
+      # Only run on on-demand nodes
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-type
+                    operator: In
+                    values:
+                      - ondemand
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: payment-service
+              topologyKey: topology.kubernetes.io/zone
+
+      containers:
+        - name: payment-service
+          image: shop/payment-service:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+
+---
+# =============================================================================
+# SPOT INSTANCE HANDLER (SIGTERM HANDLER)
+# =============================================================================
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spot-termination-handler
+  namespace: kube-system
+  labels:
+    app: spot-termination-handler
+spec:
+  selector:
+    matchLabels:
+      app: spot-termination-handler
+  template:
+    metadata:
+      labels:
+        app: spot-termination-handler
+    spec:
+      serviceAccountName: spot-termination-handler
+      tolerations:
+        - key: "cloud.google.com/gke-spot"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: handler
+          image: gcr.io/google-containers/k8s-node-termination-handler:v1.0.0
+          args:
+            - --logtostderr
+            - --v=2
+            - --taint-node=true
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spot-termination-handler
+  namespace: kube-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spot-termination-handler
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spot-termination-handler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: spot-termination-handler
+subjects:
+  - kind: ServiceAccount
+    name: spot-termination-handler
+    namespace: kube-system
+
+---
+# =============================================================================
+# COST ALLOCATION LABELS (FinOps)
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+  labels:
+    cost-center: "engineering"
+    environment: "production"
+    team: "platform"
+
+---
+# Kubecost Configuration for cost monitoring
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubecost-config
+  namespace: kubecost
+data:
+  config.yaml: |
+    # Cost allocation settings
+    costAllocation:
+      enabled: true
+      labels:
+        - app
+        - team
+        - cost-center
+        - environment
+        - cost-optimization
+
+    # Spot pricing
+    spotInstances:
+      enabled: true
+      discountRate: 0.70  # 70% discount for spot
+
+    # Budget alerts
+    budgets:
+      - name: production-monthly
+        amount: 10000
+        currency: USD
+        alertThresholds:
+          - percentage: 50
+            channel: slack
+          - percentage: 80
+            channel: slack
+          - percentage: 100
+            channel: pagerduty
+
+    # Recommendations
+    recommendations:
+      rightSizing:
+        enabled: true
+        targetUtilization: 0.65
+      spotMigration:
+        enabled: true
+        eligibleWorkloads:
+          - stateless
+          - batch

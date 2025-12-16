@@ -1,0 +1,444 @@
+# Falco Security Rules for E-commerce Platform
+# Runtime security monitoring and compliance automation
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: falco-system
+  labels:
+    app.kubernetes.io/name: falco
+    pod-security.kubernetes.io/enforce: privileged
+
+---
+# =============================================================================
+# CUSTOM FALCO RULES FOR E-COMMERCE
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-custom-rules
+  namespace: falco-system
+data:
+  shop-rules.yaml: |
+    # ==========================================================================
+    # PCI-DSS COMPLIANCE RULES
+    # ==========================================================================
+
+    # Rule: Detect access to payment card data
+    - rule: Access to Payment Data Files
+      desc: Detect any process accessing files that may contain payment card data
+      condition: >
+        open_read and
+        (fd.name contains "card" or
+         fd.name contains "payment" or
+         fd.name contains "credit" or
+         fd.name contains "cvv" or
+         fd.name contains "pan") and
+        not proc.name in (payment_allowed_processes)
+      output: >
+        Sensitive payment data file accessed
+        (user=%user.name command=%proc.cmdline file=%fd.name container=%container.name
+         image=%container.image.repository k8s.pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [pci-dss, data-access, compliance]
+
+    - list: payment_allowed_processes
+      items: [payment-service, stripe-webhook, checkout-service]
+
+    # Rule: Detect unencrypted payment data in logs
+    - rule: Payment Data in Logs
+      desc: Detect potential card numbers being written to logs
+      condition: >
+        (fd.name contains "log" or fd.name contains "/var/log") and
+        evt.type = write and
+        (evt.buffer contains "4[0-9]{15}" or  # Visa
+         evt.buffer contains "5[1-5][0-9]{14}" or  # Mastercard
+         evt.buffer contains "3[47][0-9]{13}")  # Amex
+      output: >
+        Potential payment card number written to log
+        (user=%user.name command=%proc.cmdline file=%fd.name container=%container.name)
+      priority: CRITICAL
+      tags: [pci-dss, data-leak, compliance]
+
+    # ==========================================================================
+    # SOC2 COMPLIANCE RULES
+    # ==========================================================================
+
+    # Rule: Detect privilege escalation
+    - rule: Privilege Escalation Attempt
+      desc: Detect attempts to escalate privileges in containers
+      condition: >
+        spawned_process and
+        container and
+        (proc.name in (privilege_escalation_binaries) or
+         proc.args contains "sudo" or
+         proc.args contains "su -")
+      output: >
+        Privilege escalation attempt in container
+        (user=%user.name command=%proc.cmdline container=%container.name
+         image=%container.image.repository k8s.pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [soc2, privilege-escalation, compliance]
+
+    - list: privilege_escalation_binaries
+      items: [sudo, su, doas, pkexec]
+
+    # Rule: Detect shell spawned in container
+    - rule: Shell Spawned in Container
+      desc: Detect interactive shell in production container
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (shell_binaries) and
+        not k8s.ns.name in (allowed_shell_namespaces) and
+        not proc.pname in (allowed_shell_parents)
+      output: >
+        Shell spawned in production container
+        (user=%user.name shell=%proc.name parent=%proc.pname container=%container.name
+         image=%container.image.repository k8s.pod=%k8s.pod.name k8s.ns=%k8s.ns.name)
+      priority: WARNING
+      tags: [soc2, shell-access, compliance]
+
+    - list: shell_binaries
+      items: [bash, sh, zsh, ksh, csh, fish, dash, ash]
+
+    - list: allowed_shell_namespaces
+      items: [kube-system, debug, development]
+
+    - list: allowed_shell_parents
+      items: [containerd-shim, runc, crio]
+
+    # Rule: Detect sensitive file access
+    - rule: Read Sensitive File
+      desc: Detect read of sensitive files that shouldn't be accessed
+      condition: >
+        open_read and
+        container and
+        (fd.name in (sensitive_files) or
+         fd.name startswith "/etc/shadow" or
+         fd.name startswith "/etc/passwd" or
+         fd.name startswith "/root/.ssh")
+      output: >
+        Sensitive file read in container
+        (user=%user.name command=%proc.cmdline file=%fd.name container=%container.name
+         image=%container.image.repository k8s.pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [soc2, file-access, compliance]
+
+    - list: sensitive_files
+      items:
+        - /etc/shadow
+        - /etc/gshadow
+        - /etc/sudoers
+        - /root/.bash_history
+        - /root/.ssh/id_rsa
+
+    # ==========================================================================
+    # E-COMMERCE SPECIFIC RULES
+    # ==========================================================================
+
+    # Rule: Detect database credential access
+    - rule: Database Credentials Access
+      desc: Detect access to database credentials outside of allowed processes
+      condition: >
+        open_read and
+        container and
+        (fd.name contains "database" or
+         fd.name contains "postgres" or
+         fd.name contains "mysql" or
+         fd.name contains ".pgpass") and
+        not proc.name in (database_allowed_processes)
+      output: >
+        Database credentials accessed by unexpected process
+        (user=%user.name command=%proc.cmdline file=%fd.name container=%container.name
+         image=%container.image.repository)
+      priority: WARNING
+      tags: [database, credentials, security]
+
+    - list: database_allowed_processes
+      items: [psql, pg_dump, mysql, core-service, analytics-etl]
+
+    # Rule: Detect outbound connection to unexpected IP
+    - rule: Suspicious Outbound Connection
+      desc: Detect outbound connections to non-whitelisted IPs from payment services
+      condition: >
+        outbound and
+        container.image.repository contains "payment" and
+        not fd.sip.name in (allowed_payment_destinations)
+      output: >
+        Payment service connecting to unexpected destination
+        (command=%proc.cmdline connection=%fd.name container=%container.name
+         dest_ip=%fd.sip.name dest_port=%fd.sport)
+      priority: CRITICAL
+      tags: [pci-dss, network, exfiltration]
+
+    - list: allowed_payment_destinations
+      items:
+        - api.stripe.com
+        - api.liqpay.ua
+        - secure.wayforpay.com
+
+    # Rule: Detect crypto mining
+    - rule: Crypto Mining Detected
+      desc: Detect potential cryptocurrency mining activity
+      condition: >
+        spawned_process and
+        container and
+        (proc.name in (crypto_miners) or
+         proc.args contains "stratum" or
+         proc.args contains "pool" or
+         proc.args contains "-o stratum")
+      output: >
+        Potential crypto mining detected
+        (command=%proc.cmdline container=%container.name image=%container.image.repository
+         k8s.pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [cryptomining, malware, security]
+
+    - list: crypto_miners
+      items: [xmrig, minerd, cpuminer, cgminer, bfgminer, ethminer]
+
+    # Rule: Detect container escape attempts
+    - rule: Container Escape Attempt
+      desc: Detect attempts to escape container isolation
+      condition: >
+        spawned_process and
+        container and
+        (proc.args contains "/proc/1/root" or
+         proc.args contains "nsenter" or
+         proc.args contains "--privileged" or
+         proc.name = "nsenter")
+      output: >
+        Container escape attempt detected
+        (command=%proc.cmdline container=%container.name image=%container.image.repository
+         k8s.pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [container-escape, security, critical]
+
+    # Rule: Detect secrets in environment variables
+    - rule: Secrets in Environment
+      desc: Detect when secrets might be exposed in environment variables
+      condition: >
+        spawned_process and
+        container and
+        (proc.env contains "PASSWORD=" or
+         proc.env contains "SECRET=" or
+         proc.env contains "API_KEY=" or
+         proc.env contains "TOKEN=") and
+        not proc.name in (secret_allowed_processes)
+      output: >
+        Potential secret in environment variable
+        (command=%proc.cmdline container=%container.name k8s.pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [secrets, environment, security]
+
+    - list: secret_allowed_processes
+      items: [vault-agent, secrets-store-csi]
+
+    # ==========================================================================
+    # AUDIT LOGGING RULES
+    # ==========================================================================
+
+    # Rule: Log all kubectl exec commands
+    - rule: Kubectl Exec Audit
+      desc: Log all kubectl exec commands for audit trail
+      condition: >
+        spawned_process and
+        proc.name = "runc" and
+        proc.args contains "exec"
+      output: >
+        Kubectl exec command executed
+        (user=%user.name command=%proc.cmdline container=%container.name
+         k8s.pod=%k8s.pod.name k8s.ns=%k8s.ns.name)
+      priority: NOTICE
+      tags: [audit, kubectl, access]
+
+    # Rule: Detect config changes
+    - rule: Configuration File Modified
+      desc: Detect modifications to configuration files
+      condition: >
+        open_write and
+        container and
+        (fd.name endswith ".conf" or
+         fd.name endswith ".yaml" or
+         fd.name endswith ".yml" or
+         fd.name endswith ".json") and
+        not fd.name startswith "/tmp"
+      output: >
+        Configuration file modified in container
+        (user=%user.name command=%proc.cmdline file=%fd.name container=%container.name
+         k8s.pod=%k8s.pod.name)
+      priority: INFO
+      tags: [audit, config-change, compliance]
+
+---
+# =============================================================================
+# FALCO HELM VALUES (as ConfigMap for reference)
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-helm-values
+  namespace: falco-system
+data:
+  values.yaml: |
+    # Falco Helm chart values for Shop Platform
+
+    driver:
+      kind: ebpf  # Modern eBPF driver for better performance
+
+    falco:
+      grpc:
+        enabled: true
+      grpc_output:
+        enabled: true
+      json_output: true
+      json_include_output_property: true
+
+      rules_file:
+        - /etc/falco/falco_rules.yaml
+        - /etc/falco/falco_rules.local.yaml
+        - /etc/falco/shop-rules.yaml
+
+      # Priority filtering
+      priority: info
+
+      # Buffering
+      buffered_outputs: true
+      output_timeout: 2000
+
+    # Custom rules from ConfigMap
+    customRules:
+      shop-rules.yaml: |
+        # Mounted from falco-custom-rules ConfigMap
+
+    # Falcosidekick integration
+    falcosidekick:
+      enabled: true
+      config:
+        slack:
+          webhookurl: "https://hooks.slack.com/services/xxx"
+          channel: "#security-alerts"
+          minimumpriority: "warning"
+
+        pagerduty:
+          routingkey: "xxx"
+          minimumpriority: "critical"
+
+        elasticsearch:
+          hostport: "http://elasticsearch:9200"
+          index: "falco-alerts"
+          minimumpriority: "info"
+
+        loki:
+          hostport: "http://loki:3100"
+          minimumpriority: "info"
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1024Mi
+
+    # Tolerations for all nodes
+    tolerations:
+      - effect: NoSchedule
+        operator: Exists
+
+---
+# =============================================================================
+# COMPLIANCE DASHBOARD (Grafana)
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: compliance-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  compliance-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "Security & Compliance Dashboard",
+        "tags": ["security", "compliance", "pci-dss", "soc2"],
+        "panels": [
+          {
+            "title": "Critical Security Alerts (24h)",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(increase(falco_events{priority=\"critical\"}[24h]))"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": 0},
+                    {"color": "yellow", "value": 1},
+                    {"color": "red", "value": 5}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "title": "Alerts by Category",
+            "type": "piechart",
+            "targets": [
+              {
+                "expr": "sum by (tags) (increase(falco_events[24h]))"
+              }
+            ]
+          },
+          {
+            "title": "PCI-DSS Violations",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "sum(rate(falco_events{tags=~\".*pci-dss.*\"}[5m])) by (rule)"
+              }
+            ]
+          },
+          {
+            "title": "Container Shell Access",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "falco_events{rule=\"Shell Spawned in Container\"}"
+              }
+            ]
+          },
+          {
+            "title": "Compliance Score",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "100 - (sum(increase(falco_events{priority=~\"critical|warning\"}[7d])) / 10)"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "min": 0,
+                "max": 100,
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "yellow", "value": 70},
+                    {"color": "green", "value": 90}
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }

@@ -1,0 +1,40 @@
+{
+  "name": "@shop/sdk",
+  "version": "1.0.0",
+  "description": "Official Shop Platform SDK for Node.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "shop",
+    "ecommerce",
+    "marketplace",
+    "api",
+    "sdk"
+  ],
+  "author": "Shop Platform",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shop/sdk-node"
+  },
+  "homepage": "https://docs.shop.com/sdk/node",
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

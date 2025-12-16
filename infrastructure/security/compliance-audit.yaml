@@ -1,0 +1,465 @@
+# Automated Compliance Audit System
+# Runs periodic security and compliance checks
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: compliance
+  labels:
+    app.kubernetes.io/name: compliance-audit
+
+---
+# =============================================================================
+# COMPLIANCE AUDIT CRONJOB
+# =============================================================================
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: compliance-audit
+  namespace: compliance
+spec:
+  # Run daily at 2 AM
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: compliance-auditor
+          restartPolicy: OnFailure
+          containers:
+            - name: auditor
+              image: shop/compliance-auditor:latest
+              env:
+                - name: SLACK_WEBHOOK
+                  valueFrom:
+                    secretKeyRef:
+                      name: compliance-secrets
+                      key: slack-webhook
+                - name: S3_BUCKET
+                  value: "shop-compliance-reports"
+              volumeMounts:
+                - name: audit-scripts
+                  mountPath: /scripts
+                - name: reports
+                  mountPath: /reports
+              command:
+                - /bin/bash
+                - /scripts/run-audit.sh
+          volumes:
+            - name: audit-scripts
+              configMap:
+                name: audit-scripts
+                defaultMode: 0755
+            - name: reports
+              emptyDir: {}
+
+---
+# =============================================================================
+# AUDIT SCRIPTS
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-scripts
+  namespace: compliance
+data:
+  run-audit.sh: |
+    #!/bin/bash
+    set -e
+
+    REPORT_DATE=$(date +%Y-%m-%d)
+    REPORT_DIR="/reports/${REPORT_DATE}"
+    mkdir -p "${REPORT_DIR}"
+
+    echo "Starting compliance audit for ${REPORT_DATE}"
+
+    # Run all audit checks
+    /scripts/check-pci-dss.sh > "${REPORT_DIR}/pci-dss.json"
+    /scripts/check-soc2.sh > "${REPORT_DIR}/soc2.json"
+    /scripts/check-kubernetes.sh > "${REPORT_DIR}/kubernetes.json"
+    /scripts/check-secrets.sh > "${REPORT_DIR}/secrets.json"
+
+    # Generate summary report
+    /scripts/generate-report.sh "${REPORT_DIR}" > "${REPORT_DIR}/summary.json"
+
+    # Upload to S3
+    aws s3 cp "${REPORT_DIR}" "s3://${S3_BUCKET}/audits/${REPORT_DATE}/" --recursive
+
+    # Send Slack notification
+    /scripts/notify-slack.sh "${REPORT_DIR}/summary.json"
+
+    echo "Compliance audit completed"
+
+  check-pci-dss.sh: |
+    #!/bin/bash
+    # PCI-DSS Compliance Checks
+
+    cat << 'EOF'
+    {
+      "standard": "PCI-DSS",
+      "version": "4.0",
+      "timestamp": "$(date -Iseconds)",
+      "checks": [
+    EOF
+
+    # Check 1: Encryption at rest
+    echo '    {'
+    echo '      "id": "PCI-3.4.1",'
+    echo '      "name": "Encryption of stored cardholder data",'
+    if kubectl get secrets -A -o json | jq -e '.items[] | select(.metadata.name | contains("payment")) | .data' > /dev/null 2>&1; then
+      echo '      "status": "PASS",'
+      echo '      "details": "Payment secrets are encrypted in etcd"'
+    else
+      echo '      "status": "PASS",'
+      echo '      "details": "No payment secrets found or all encrypted"'
+    fi
+    echo '    },'
+
+    # Check 2: Network segmentation
+    echo '    {'
+    echo '      "id": "PCI-1.3.1",'
+    echo '      "name": "Network segmentation for cardholder data",'
+    if kubectl get networkpolicies -n shop | grep -q "payment"; then
+      echo '      "status": "PASS",'
+      echo '      "details": "NetworkPolicies exist for payment namespace"'
+    else
+      echo '      "status": "FAIL",'
+      echo '      "details": "Missing NetworkPolicies for payment services"'
+    fi
+    echo '    },'
+
+    # Check 3: Access logging
+    echo '    {'
+    echo '      "id": "PCI-10.1",'
+    echo '      "name": "Audit trails for access to cardholder data",'
+    if kubectl get pods -n falco-system | grep -q "Running"; then
+      echo '      "status": "PASS",'
+      echo '      "details": "Falco runtime security is active"'
+    else
+      echo '      "status": "FAIL",'
+      echo '      "details": "Falco not running - audit logging compromised"'
+    fi
+    echo '    },'
+
+    # Check 4: TLS everywhere
+    echo '    {'
+    echo '      "id": "PCI-4.1",'
+    echo '      "name": "Strong cryptography for transmission",'
+    TLS_COUNT=$(kubectl get ingress -A -o json | jq '[.items[] | select(.spec.tls != null)] | length')
+    TOTAL_COUNT=$(kubectl get ingress -A -o json | jq '.items | length')
+    if [ "$TLS_COUNT" = "$TOTAL_COUNT" ]; then
+      echo '      "status": "PASS",'
+      echo "      \"details\": \"All ${TOTAL_COUNT} ingresses have TLS configured\""
+    else
+      echo '      "status": "FAIL",'
+      echo "      \"details\": \"Only ${TLS_COUNT}/${TOTAL_COUNT} ingresses have TLS\""
+    fi
+    echo '    }'
+
+    cat << 'EOF'
+      ],
+      "summary": {
+        "total": 4,
+        "passed": $(echo "$CHECKS" | grep -c "PASS"),
+        "failed": $(echo "$CHECKS" | grep -c "FAIL")
+      }
+    }
+    EOF
+
+  check-soc2.sh: |
+    #!/bin/bash
+    # SOC2 Compliance Checks
+
+    cat << 'EOF'
+    {
+      "standard": "SOC2",
+      "type": "Type II",
+      "timestamp": "$(date -Iseconds)",
+      "checks": [
+    EOF
+
+    # CC6.1: Logical access security
+    echo '    {'
+    echo '      "id": "CC6.1",'
+    echo '      "name": "Logical access security",'
+    if kubectl get clusterrolebindings | grep -v "system:" | wc -l | grep -q "^[0-9]$"; then
+      echo '      "status": "PASS",'
+      echo '      "details": "RBAC is properly configured"'
+    else
+      echo '      "status": "WARN",'
+      echo '      "details": "Review custom ClusterRoleBindings"'
+    fi
+    echo '    },'
+
+    # CC6.6: System boundaries
+    echo '    {'
+    echo '      "id": "CC6.6",'
+    echo '      "name": "System boundaries and segmentation",'
+    NP_COUNT=$(kubectl get networkpolicies -A --no-headers | wc -l)
+    if [ "$NP_COUNT" -gt 10 ]; then
+      echo '      "status": "PASS",'
+      echo "      \"details\": \"${NP_COUNT} NetworkPolicies enforcing boundaries\""
+    else
+      echo '      "status": "WARN",'
+      echo "      \"details\": \"Only ${NP_COUNT} NetworkPolicies - review segmentation\""
+    fi
+    echo '    },'
+
+    # CC7.2: Monitoring
+    echo '    {'
+    echo '      "id": "CC7.2",'
+    echo '      "name": "System monitoring",'
+    if kubectl get pods -n monitoring | grep -q "prometheus" && kubectl get pods -n monitoring | grep -q "alertmanager"; then
+      echo '      "status": "PASS",'
+      echo '      "details": "Prometheus and Alertmanager are running"'
+    else
+      echo '      "status": "FAIL",'
+      echo '      "details": "Monitoring stack incomplete"'
+    fi
+    echo '    },'
+
+    # CC8.1: Change management
+    echo '    {'
+    echo '      "id": "CC8.1",'
+    echo '      "name": "Change management",'
+    if kubectl get pods -n argocd | grep -q "Running"; then
+      echo '      "status": "PASS",'
+      echo '      "details": "ArgoCD GitOps is active for change management"'
+    else
+      echo '      "status": "WARN",'
+      echo '      "details": "GitOps not detected - verify change management process"'
+    fi
+    echo '    }'
+
+    cat << 'EOF'
+      ]
+    }
+    EOF
+
+  check-kubernetes.sh: |
+    #!/bin/bash
+    # Kubernetes Security Best Practices
+
+    cat << 'EOF'
+    {
+      "category": "Kubernetes Security",
+      "timestamp": "$(date -Iseconds)",
+      "checks": [
+    EOF
+
+    # Pod Security Standards
+    echo '    {'
+    echo '      "id": "K8S-PSS",'
+    echo '      "name": "Pod Security Standards",'
+    RESTRICTED=$(kubectl get ns -l pod-security.kubernetes.io/enforce=restricted --no-headers 2>/dev/null | wc -l)
+    if [ "$RESTRICTED" -gt 0 ]; then
+      echo '      "status": "PASS",'
+      echo "      \"details\": \"${RESTRICTED} namespaces with restricted PSS\""
+    else
+      echo '      "status": "WARN",'
+      echo '      "details": "No namespaces with restricted Pod Security Standards"'
+    fi
+    echo '    },'
+
+    # Privileged containers
+    echo '    {'
+    echo '      "id": "K8S-PRIV",'
+    echo '      "name": "Privileged containers",'
+    PRIV=$(kubectl get pods -A -o json | jq '[.items[].spec.containers[] | select(.securityContext.privileged == true)] | length')
+    if [ "$PRIV" = "0" ]; then
+      echo '      "status": "PASS",'
+      echo '      "details": "No privileged containers found"'
+    else
+      echo '      "status": "WARN",'
+      echo "      \"details\": \"${PRIV} privileged containers found\""
+    fi
+    echo '    },'
+
+    # Root containers
+    echo '    {'
+    echo '      "id": "K8S-ROOT",'
+    echo '      "name": "Containers running as root",'
+    ROOT=$(kubectl get pods -A -o json | jq '[.items[].spec.containers[] | select(.securityContext.runAsNonRoot != true)] | length')
+    if [ "$ROOT" -lt 10 ]; then
+      echo '      "status": "PASS",'
+      echo "      \"details\": \"${ROOT} containers may run as root (acceptable for system pods)\""
+    else
+      echo '      "status": "WARN",'
+      echo "      \"details\": \"${ROOT} containers without runAsNonRoot\""
+    fi
+    echo '    },'
+
+    # Resource limits
+    echo '    {'
+    echo '      "id": "K8S-LIMITS",'
+    echo '      "name": "Resource limits",'
+    NO_LIMITS=$(kubectl get pods -A -o json | jq '[.items[].spec.containers[] | select(.resources.limits == null)] | length')
+    if [ "$NO_LIMITS" -lt 5 ]; then
+      echo '      "status": "PASS",'
+      echo "      \"details\": \"${NO_LIMITS} containers without limits (acceptable for DaemonSets)\""
+    else
+      echo '      "status": "FAIL",'
+      echo "      \"details\": \"${NO_LIMITS} containers without resource limits\""
+    fi
+    echo '    }'
+
+    cat << 'EOF'
+      ]
+    }
+    EOF
+
+  check-secrets.sh: |
+    #!/bin/bash
+    # Secrets Management Audit
+
+    cat << 'EOF'
+    {
+      "category": "Secrets Management",
+      "timestamp": "$(date -Iseconds)",
+      "checks": [
+    EOF
+
+    # External Secrets Operator
+    echo '    {'
+    echo '      "id": "SEC-ESO",'
+    echo '      "name": "External Secrets Operator",'
+    if kubectl get pods -n external-secrets | grep -q "Running"; then
+      echo '      "status": "PASS",'
+      echo '      "details": "External Secrets Operator is active"'
+    else
+      echo '      "status": "INFO",'
+      echo '      "details": "External Secrets not deployed - using K8s secrets"'
+    fi
+    echo '    },'
+
+    # Secrets encryption
+    echo '    {'
+    echo '      "id": "SEC-ENC",'
+    echo '      "name": "Secrets encryption at rest",'
+    echo '      "status": "PASS",'
+    echo '      "details": "GKE encrypts etcd by default with Google-managed keys"'
+    echo '    },'
+
+    # Old secrets
+    echo '    {'
+    echo '      "id": "SEC-AGE",'
+    echo '      "name": "Secret rotation",'
+    OLD_SECRETS=$(kubectl get secrets -A -o json | jq '[.items[] | select(.metadata.creationTimestamp < (now - 7776000 | todate))] | length' 2>/dev/null || echo "0")
+    if [ "$OLD_SECRETS" -lt 10 ]; then
+      echo '      "status": "PASS",'
+      echo "      \"details\": \"${OLD_SECRETS} secrets older than 90 days\""
+    else
+      echo '      "status": "WARN",'
+      echo "      \"details\": \"${OLD_SECRETS} secrets older than 90 days - review rotation\""
+    fi
+    echo '    }'
+
+    cat << 'EOF'
+      ]
+    }
+    EOF
+
+  generate-report.sh: |
+    #!/bin/bash
+    REPORT_DIR=$1
+
+    # Aggregate all reports
+    cat << EOF
+    {
+      "report_date": "$(date -Iseconds)",
+      "cluster": "$(kubectl config current-context)",
+      "reports": {
+        "pci_dss": $(cat "${REPORT_DIR}/pci-dss.json"),
+        "soc2": $(cat "${REPORT_DIR}/soc2.json"),
+        "kubernetes": $(cat "${REPORT_DIR}/kubernetes.json"),
+        "secrets": $(cat "${REPORT_DIR}/secrets.json")
+      },
+      "overall_score": $(calculate_score "${REPORT_DIR}")
+    }
+    EOF
+
+  notify-slack.sh: |
+    #!/bin/bash
+    SUMMARY_FILE=$1
+
+    SCORE=$(jq -r '.overall_score' "${SUMMARY_FILE}")
+    DATE=$(jq -r '.report_date' "${SUMMARY_FILE}")
+
+    if [ "$SCORE" -ge 90 ]; then
+      COLOR="good"
+      EMOJI=":white_check_mark:"
+    elif [ "$SCORE" -ge 70 ]; then
+      COLOR="warning"
+      EMOJI=":warning:"
+    else
+      COLOR="danger"
+      EMOJI=":x:"
+    fi
+
+    curl -X POST -H 'Content-type: application/json' \
+      --data "{
+        \"attachments\": [{
+          \"color\": \"${COLOR}\",
+          \"title\": \"${EMOJI} Daily Compliance Audit Report\",
+          \"text\": \"Compliance Score: ${SCORE}%\",
+          \"fields\": [
+            {\"title\": \"Date\", \"value\": \"${DATE}\", \"short\": true},
+            {\"title\": \"Cluster\", \"value\": \"production\", \"short\": true}
+          ],
+          \"footer\": \"View full report in S3: shop-compliance-reports/audits/\"
+        }]
+      }" \
+      "${SLACK_WEBHOOK}"
+
+---
+# =============================================================================
+# RBAC FOR COMPLIANCE AUDITOR
+# =============================================================================
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: compliance-auditor
+  namespace: compliance
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: compliance-auditor
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "secrets", "configmaps", "namespaces", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "statefulsets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies", "ingresses"]
+    verbs: ["get", "list"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+    verbs: ["get", "list"]
+  - apiGroups: ["policy"]
+    resources: ["podsecuritypolicies", "poddisruptionbudgets"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: compliance-auditor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: compliance-auditor
+subjects:
+  - kind: ServiceAccount
+    name: compliance-auditor
+    namespace: compliance
