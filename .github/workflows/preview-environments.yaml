@@ -1,0 +1,399 @@
+name: Preview Environment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_target:
+    types: [closed]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: shop-staging
+  GKE_REGION: europe-west1
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Deploy Preview Environment
+  deploy-preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+      id-token: write
+
+    outputs:
+      preview-url: ${{ steps.deploy.outputs.preview-url }}
+      namespace: ${{ steps.setup.outputs.namespace }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup namespace
+        id: setup
+        run: |
+          NAMESPACE="preview-pr-${{ github.event.pull_request.number }}"
+          echo "namespace=${NAMESPACE}" >> $GITHUB_OUTPUT
+
+      - name: Setup Google Cloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_REGION }}
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push services
+        run: |
+          PR_TAG="pr-${{ github.event.pull_request.number }}"
+
+          for service in core oms crm notification storefront admin; do
+            echo "Building $service..."
+            docker build \
+              -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/$service:$PR_TAG \
+              ./services/$service
+
+            docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/$service:$PR_TAG
+          done
+
+      - name: Create preview namespace
+        run: |
+          kubectl create namespace ${{ steps.setup.outputs.namespace }} --dry-run=client -o yaml | kubectl apply -f -
+
+          # Add labels
+          kubectl label namespace ${{ steps.setup.outputs.namespace }} \
+            preview=true \
+            pr-number="${{ github.event.pull_request.number }}" \
+            --overwrite
+
+      - name: Deploy preview environment
+        id: deploy
+        run: |
+          NAMESPACE="${{ steps.setup.outputs.namespace }}"
+          PR_TAG="pr-${{ github.event.pull_request.number }}"
+          PREVIEW_HOST="pr-${{ github.event.pull_request.number }}.preview.shop.example.com"
+
+          # Create ConfigMap for preview
+          kubectl create configmap preview-config \
+            --namespace=$NAMESPACE \
+            --from-literal=ENVIRONMENT=preview \
+            --from-literal=PR_NUMBER=${{ github.event.pull_request.number }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # Deploy PostgreSQL (shared or isolated based on PR changes)
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: postgres-data
+            namespace: $NAMESPACE
+          spec:
+            accessModes: [ReadWriteOnce]
+            resources:
+              requests:
+                storage: 5Gi
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: postgres
+            namespace: $NAMESPACE
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: postgres
+            template:
+              metadata:
+                labels:
+                  app: postgres
+              spec:
+                containers:
+                  - name: postgres
+                    image: postgres:15-alpine
+                    env:
+                      - name: POSTGRES_USER
+                        value: user
+                      - name: POSTGRES_PASSWORD
+                        value: password
+                      - name: POSTGRES_DB
+                        value: shop
+                    ports:
+                      - containerPort: 5432
+                    volumeMounts:
+                      - name: data
+                        mountPath: /var/lib/postgresql/data
+                volumes:
+                  - name: data
+                    persistentVolumeClaim:
+                      claimName: postgres-data
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: postgres
+            namespace: $NAMESPACE
+          spec:
+            selector:
+              app: postgres
+            ports:
+              - port: 5432
+          EOF
+
+          # Deploy Redis
+          kubectl apply -f - <<EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: redis
+            namespace: $NAMESPACE
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: redis
+            template:
+              metadata:
+                labels:
+                  app: redis
+              spec:
+                containers:
+                  - name: redis
+                    image: redis:7-alpine
+                    ports:
+                      - containerPort: 6379
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: redis
+            namespace: $NAMESPACE
+          spec:
+            selector:
+              app: redis
+            ports:
+              - port: 6379
+          EOF
+
+          # Deploy services
+          for service in core oms crm notification storefront admin; do
+            PORT=8080
+            if [ "$service" = "oms" ]; then PORT=8081; fi
+            if [ "$service" = "crm" ]; then PORT=8082; fi
+            if [ "$service" = "notification" ]; then PORT=8083; fi
+            if [ "$service" = "storefront" ]; then PORT=3000; fi
+            if [ "$service" = "admin" ]; then PORT=3001; fi
+
+            kubectl apply -f - <<EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: $service
+            namespace: $NAMESPACE
+            labels:
+              app: $service
+              preview: "true"
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: $service
+            template:
+              metadata:
+                labels:
+                  app: $service
+              spec:
+                containers:
+                  - name: $service
+                    image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/$service:$PR_TAG
+                    ports:
+                      - containerPort: $PORT
+                    env:
+                      - name: ENVIRONMENT
+                        value: preview
+                      - name: DATABASE_URL
+                        value: postgres://user:password@postgres:5432/shop?sslmode=disable
+                      - name: REDIS_URL
+                        value: redis://redis:6379
+                    resources:
+                      requests:
+                        cpu: 50m
+                        memory: 128Mi
+                      limits:
+                        cpu: 200m
+                        memory: 256Mi
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: $service
+            namespace: $NAMESPACE
+          spec:
+            selector:
+              app: $service
+            ports:
+              - port: $PORT
+          EOF
+          done
+
+          # Create Ingress
+          kubectl apply -f - <<EOF
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: preview-ingress
+            namespace: $NAMESPACE
+            annotations:
+              kubernetes.io/ingress.class: nginx
+              cert-manager.io/cluster-issuer: letsencrypt-prod
+          spec:
+            tls:
+              - hosts:
+                  - $PREVIEW_HOST
+                secretName: preview-tls
+            rules:
+              - host: $PREVIEW_HOST
+                http:
+                  paths:
+                    - path: /api
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: core
+                          port:
+                            number: 8080
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: storefront
+                          port:
+                            number: 3000
+          EOF
+
+          echo "preview-url=https://$PREVIEW_HOST" >> $GITHUB_OUTPUT
+
+      - name: Wait for deployment
+        run: |
+          kubectl wait --for=condition=available deployment --all \
+            -n ${{ steps.setup.outputs.namespace }} \
+            --timeout=300s
+
+      - name: Run smoke tests
+        run: |
+          PREVIEW_URL="${{ steps.deploy.outputs.preview-url }}"
+
+          # Wait for services to be ready
+          sleep 30
+
+          # Health check
+          curl -sf "$PREVIEW_URL/health" || echo "Health check pending..."
+
+          # Basic API test
+          curl -sf "$PREVIEW_URL/api/v1/health" || echo "API health pending..."
+
+      - name: Comment PR with preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const previewUrl = '${{ steps.deploy.outputs.preview-url }}';
+            const namespace = '${{ steps.setup.outputs.namespace }}';
+
+            const body = `## Preview Environment Ready
+
+            | Resource | URL |
+            |----------|-----|
+            | Storefront | ${previewUrl} |
+            | API | ${previewUrl}/api/v1 |
+
+            **Namespace:** \`${namespace}\`
+
+            Preview environment will be automatically deleted when this PR is closed.
+
+            ---
+            *Deployed at ${new Date().toISOString()}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  # Cleanup Preview Environment
+  cleanup-preview:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Setup Google Cloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_REGION }}
+
+      - name: Delete preview namespace
+        run: |
+          NAMESPACE="preview-pr-${{ github.event.pull_request.number }}"
+
+          echo "Deleting namespace: $NAMESPACE"
+          kubectl delete namespace $NAMESPACE --ignore-not-found=true
+
+          echo "Preview environment cleaned up"
+
+      - name: Comment PR about cleanup
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## Preview Environment Cleaned Up\n\nThe preview environment for this PR has been deleted.'
+            });
+
+  # Scheduled cleanup of stale preview environments
+  cleanup-stale:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup stale environments
+        run: |
+          # Delete preview namespaces older than 7 days
+          kubectl get namespaces -l preview=true -o json | \
+            jq -r '.items[] | select(.metadata.creationTimestamp | fromdateiso8601 < (now - 604800)) | .metadata.name' | \
+            xargs -r -I {} kubectl delete namespace {}

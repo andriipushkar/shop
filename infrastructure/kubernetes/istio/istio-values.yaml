@@ -1,0 +1,161 @@
+# Istio Installation Values
+# Install with: istioctl install -f istio-values.yaml
+
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  namespace: istio-system
+  name: shop-istio
+spec:
+  profile: default
+
+  # Mesh configuration
+  meshConfig:
+    # Enable access logging
+    accessLogFile: /dev/stdout
+    accessLogFormat: |
+      [%START_TIME%] "%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%"
+      %RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_RECEIVED% %BYTES_SENT%
+      %DURATION% "%REQ(X-FORWARDED-FOR)%" "%REQ(USER-AGENT)%"
+      "%REQ(X-REQUEST-ID)%" "%REQ(:AUTHORITY)%" "%UPSTREAM_HOST%"
+      %UPSTREAM_CLUSTER% %UPSTREAM_LOCAL_ADDRESS% %DOWNSTREAM_LOCAL_ADDRESS%
+      %DOWNSTREAM_REMOTE_ADDRESS% %REQUESTED_SERVER_NAME% %ROUTE_NAME%
+      trace_id=%REQ(X-B3-TRACEID)%
+
+    # Enable distributed tracing
+    enableTracing: true
+    defaultConfig:
+      tracing:
+        sampling: 100
+        zipkin:
+          address: jaeger-collector.observability:9411
+
+      # Enable Envoy stats
+      proxyStatsMatcher:
+        inclusionPrefixes:
+          - cluster.outbound
+          - cluster_manager
+          - listener_manager
+          - http_mixer_filter
+          - tcp_mixer_filter
+          - server
+          - cluster.xds-grpc
+
+    # Enable STRICT mTLS by default
+    defaultProviders:
+      metrics:
+        - prometheus
+
+    # Outbound traffic policy
+    outboundTrafficPolicy:
+      mode: REGISTRY_ONLY
+
+    # Enable locality load balancing
+    localityLbSetting:
+      enabled: true
+      failover:
+        - from: ua/kyiv
+          to: ua/lviv
+        - from: ua/lviv
+          to: eu/warsaw
+
+  components:
+    # Istio Ingress Gateway
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          service:
+            type: LoadBalancer
+            ports:
+              - port: 80
+                targetPort: 8080
+                name: http2
+              - port: 443
+                targetPort: 8443
+                name: https
+              - port: 15443
+                targetPort: 15443
+                name: tls
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 2000m
+              memory: 1024Mi
+          hpaSpec:
+            minReplicas: 2
+            maxReplicas: 10
+            metrics:
+              - type: Resource
+                resource:
+                  name: cpu
+                  targetAverageUtilization: 80
+
+    # Istio Egress Gateway
+    egressGateways:
+      - name: istio-egressgateway
+        enabled: true
+        k8s:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          hpaSpec:
+            minReplicas: 1
+            maxReplicas: 5
+
+    # Pilot (Control Plane)
+    pilot:
+      enabled: true
+      k8s:
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 1000m
+            memory: 4Gi
+        hpaSpec:
+          minReplicas: 2
+          maxReplicas: 5
+        env:
+          - name: PILOT_TRACE_SAMPLING
+            value: "100"
+
+  values:
+    global:
+      # Enable automatic sidecar injection
+      proxy:
+        autoInject: enabled
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+
+      # mTLS settings
+      mtls:
+        enabled: true
+
+      # Tracing settings
+      tracer:
+        zipkin:
+          address: jaeger-collector.observability:9411
+
+    # Sidecar injector settings
+    sidecarInjectorWebhook:
+      enableNamespacesByDefault: false
+      injectedAnnotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+
+    # Telemetry settings
+    telemetry:
+      enabled: true
+      v2:
+        enabled: true
+        prometheus:
+          enabled: true

@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <profiles>
+        <!-- Default profile for general queries -->
+        <default>
+            <max_memory_usage>10000000000</max_memory_usage>
+            <use_uncompressed_cache>0</use_uncompressed_cache>
+            <load_balancing>random</load_balancing>
+            <max_execution_time>60</max_execution_time>
+        </default>
+
+        <!-- Read-only profile for analytics dashboards -->
+        <readonly>
+            <readonly>1</readonly>
+            <max_memory_usage>5000000000</max_memory_usage>
+            <max_execution_time>30</max_execution_time>
+        </readonly>
+
+        <!-- ETL profile for data ingestion -->
+        <etl>
+            <max_memory_usage>15000000000</max_memory_usage>
+            <max_execution_time>300</max_execution_time>
+            <max_insert_block_size>1000000</max_insert_block_size>
+            <max_threads>8</max_threads>
+        </etl>
+
+        <!-- Analytics profile for heavy queries -->
+        <analytics>
+            <max_memory_usage>20000000000</max_memory_usage>
+            <max_execution_time>120</max_execution_time>
+            <max_threads>16</max_threads>
+            <distributed_product_mode>global</distributed_product_mode>
+        </analytics>
+    </profiles>
+
+    <users>
+        <!-- Analytics user for ETL and queries -->
+        <analytics>
+            <password>analytics_password</password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>default</profile>
+            <quota>default</quota>
+            <access_management>1</access_management>
+        </analytics>
+
+        <!-- ETL user for data ingestion -->
+        <etl_user>
+            <password>etl_secure_password</password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>etl</profile>
+            <quota>default</quota>
+        </etl_user>
+
+        <!-- Read-only user for dashboards -->
+        <dashboard>
+            <password>dashboard_password</password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>readonly</profile>
+            <quota>default</quota>
+        </dashboard>
+    </users>
+
+    <quotas>
+        <default>
+            <interval>
+                <duration>3600</duration>
+                <queries>10000</queries>
+                <errors>100</errors>
+                <result_rows>100000000</result_rows>
+                <read_rows>1000000000</read_rows>
+                <execution_time>3600</execution_time>
+            </interval>
+        </default>
+    </quotas>
+</clickhouse>

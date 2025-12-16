@@ -1,0 +1,89 @@
+---
+# JWT Authentication for API endpoints
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: jwt-auth
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: core-service
+  jwtRules:
+    - issuer: "https://auth.shop.example.com"
+      jwksUri: "https://auth.shop.example.com/.well-known/jwks.json"
+      audiences:
+        - "shop-api"
+      forwardOriginalToken: true
+      outputPayloadToHeader: "x-jwt-payload"
+      fromHeaders:
+        - name: Authorization
+          prefix: "Bearer "
+      fromCookies:
+        - "access_token"
+---
+# JWT Authentication for Admin Panel
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: admin-jwt-auth
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: admin-panel
+  jwtRules:
+    - issuer: "https://auth.shop.example.com"
+      jwksUri: "https://auth.shop.example.com/.well-known/jwks.json"
+      audiences:
+        - "shop-admin"
+      forwardOriginalToken: true
+      fromHeaders:
+        - name: Authorization
+          prefix: "Bearer "
+---
+# Require JWT for protected endpoints
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: require-jwt
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: core-service
+  action: DENY
+  rules:
+    # Deny access to protected endpoints without valid JWT
+    - from:
+        - source:
+            notRequestPrincipals:
+              - "*"
+      to:
+        - operation:
+            paths:
+              - "/api/v1/orders/*"
+              - "/api/v1/cart/*"
+              - "/api/v1/checkout/*"
+              - "/api/v1/profile/*"
+              - "/api/v1/wishlist/*"
+---
+# Peer Authentication - Enable mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-mtls
+  namespace: shop
+spec:
+  mtls:
+    mode: STRICT
+---
+# Disable mTLS for data namespace (databases)
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: disable-mtls
+  namespace: shop-data
+spec:
+  mtls:
+    mode: DISABLE

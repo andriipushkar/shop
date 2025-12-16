@@ -1,0 +1,231 @@
+---
+# Core Service Destination Rule
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: core-service
+  namespace: shop
+spec:
+  host: core-service
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+      http:
+        h2UpgradePolicy: UPGRADE
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 10
+        maxRetries: 3
+
+    loadBalancer:
+      simple: LEAST_REQUEST
+      localityLbSetting:
+        enabled: true
+        failover:
+          - from: ua/kyiv
+            to: ua/lviv
+
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+
+    tls:
+      mode: ISTIO_MUTUAL
+
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+      trafficPolicy:
+        connectionPool:
+          http:
+            http2MaxRequests: 1000
+
+    - name: canary
+      labels:
+        version: canary
+      trafficPolicy:
+        connectionPool:
+          http:
+            http2MaxRequests: 100
+
+    - name: v2
+      labels:
+        version: v2
+---
+# OMS Service Destination Rule
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: oms-service
+  namespace: shop
+spec:
+  host: oms-service
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 50
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 500
+        maxRetries: 3
+
+    loadBalancer:
+      simple: ROUND_ROBIN
+
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 30s
+      baseEjectionTime: 120s
+      maxEjectionPercent: 30
+
+    tls:
+      mode: ISTIO_MUTUAL
+
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+
+    - name: premium
+      labels:
+        tier: premium
+      trafficPolicy:
+        connectionPool:
+          http:
+            http2MaxRequests: 1000
+---
+# CRM Service Destination Rule
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: crm-service
+  namespace: shop
+spec:
+  host: crm-service
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 30
+      http:
+        http1MaxPendingRequests: 30
+        http2MaxRequests: 300
+
+    loadBalancer:
+      simple: ROUND_ROBIN
+
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 60s
+      baseEjectionTime: 60s
+
+    tls:
+      mode: ISTIO_MUTUAL
+
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+---
+# Storefront Destination Rule
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: storefront
+  namespace: shop
+spec:
+  host: storefront
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 200
+      http:
+        http1MaxPendingRequests: 200
+        http2MaxRequests: 2000
+
+    loadBalancer:
+      simple: LEAST_REQUEST
+
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+
+    tls:
+      mode: ISTIO_MUTUAL
+
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+---
+# Notification Service Destination Rule
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: notification-service
+  namespace: shop
+spec:
+  host: notification-service
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 20
+      http:
+        http1MaxPendingRequests: 20
+        http2MaxRequests: 200
+
+    loadBalancer:
+      simple: RANDOM
+
+    outlierDetection:
+      consecutive5xxErrors: 10
+      interval: 30s
+      baseEjectionTime: 30s
+
+    tls:
+      mode: ISTIO_MUTUAL
+
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+---
+# PostgreSQL Destination Rule (disable mTLS for external databases)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: postgres
+  namespace: shop
+spec:
+  host: postgres.shop-data.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 10s
+    tls:
+      mode: DISABLE
+---
+# Redis Destination Rule
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: redis
+  namespace: shop
+spec:
+  host: redis.shop-data.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 200
+        connectTimeout: 5s
+    tls:
+      mode: DISABLE

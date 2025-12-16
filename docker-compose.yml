@@ -157,9 +157,71 @@ services:
       - "14268:14268"  # Jaeger HTTP
       - "6831:6831/udp"  # Jaeger compact thrift
 
+  # ClickHouse OLAP database for analytics
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.1
+    ports:
+      - "8123:8123"   # HTTP interface
+      - "9000:9000"   # Native TCP
+      - "9009:9009"   # Interserver HTTP
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./infrastructure/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
+      - ./infrastructure/clickhouse/users.xml:/etc/clickhouse-server/users.d/custom.xml:ro
+    environment:
+      - CLICKHOUSE_DB=shop_analytics
+      - CLICKHOUSE_USER=analytics
+      - CLICKHOUSE_PASSWORD=analytics_password
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Analytics ETL service - syncs data from PostgreSQL to ClickHouse
+  analytics-etl:
+    build: ./services/analytics-etl
+    environment:
+      - POSTGRES_URL=postgres://user:password@postgres:5432/shop?sslmode=disable
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_DB=shop_analytics
+      - CLICKHOUSE_USER=analytics
+      - CLICKHOUSE_PASSWORD=analytics_password
+      - SYNC_INTERVAL=5m
+      - BATCH_SIZE=1000
+    depends_on:
+      postgres:
+        condition: service_started
+      clickhouse:
+        condition: service_healthy
+
+  # OpenTelemetry Collector for metrics aggregation
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./infrastructure/otel/collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4319:4317"   # OTLP gRPC
+      - "4320:4318"   # OTLP HTTP
+      - "8888:8888"   # Prometheus metrics exposed by the collector
+      - "8889:8889"   # Prometheus exporter metrics
+    depends_on:
+      - jaeger
+      - prometheus
+
 volumes:
   postgres_data:
   redis_data:
   prometheus_data:
   grafana_data:
   elasticsearch_data:
+  clickhouse_data:
+  clickhouse_logs:

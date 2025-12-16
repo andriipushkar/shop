@@ -1,0 +1,134 @@
+---
+# Network Delay - Adds latency to service communication
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-delay-core-to-oms
+  namespace: shop
+  labels:
+    experiment: network-chaos
+    severity: medium
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: core-service
+  delay:
+    latency: "100ms"
+    correlation: "50"
+    jitter: "50ms"
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - shop
+      labelSelectors:
+        app: oms-service
+    mode: all
+  duration: "5m"
+---
+# Network Loss - Simulates packet loss
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-loss-core-to-crm
+  namespace: shop
+  labels:
+    experiment: network-chaos
+    severity: high
+spec:
+  action: loss
+  mode: all
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: core-service
+  loss:
+    loss: "10"
+    correlation: "50"
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - shop
+      labelSelectors:
+        app: crm-service
+    mode: all
+  duration: "3m"
+---
+# Network Partition - Isolates service
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-partition-notification
+  namespace: shop
+  labels:
+    experiment: network-chaos
+    severity: high
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: notification-service
+  direction: both
+  duration: "2m"
+---
+# Network Bandwidth Limitation
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-bandwidth-limit
+  namespace: shop
+  labels:
+    experiment: network-chaos
+    severity: medium
+spec:
+  action: bandwidth
+  mode: all
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: storefront
+  bandwidth:
+    rate: "1mbps"
+    limit: 100
+    buffer: 10000
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - shop
+      labelSelectors:
+        app: core-service
+    mode: all
+  duration: "5m"
+---
+# DNS Chaos - Simulates DNS failures
+apiVersion: chaos-mesh.org/v1alpha1
+kind: DNSChaos
+metadata:
+  name: dns-error-external
+  namespace: shop
+  labels:
+    experiment: network-chaos
+    severity: high
+spec:
+  action: error
+  mode: all
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: core-service
+  patterns:
+    - "api.liqpay.ua"
+    - "api.novaposhta.ua"
+  duration: "3m"

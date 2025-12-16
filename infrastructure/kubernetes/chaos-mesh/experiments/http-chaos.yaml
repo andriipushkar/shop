@@ -1,0 +1,97 @@
+---
+# HTTP Delay - Adds latency to HTTP responses
+apiVersion: chaos-mesh.org/v1alpha1
+kind: HTTPChaos
+metadata:
+  name: http-delay-api
+  namespace: shop
+  labels:
+    experiment: http-chaos
+    severity: medium
+spec:
+  mode: all
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: core-service
+  target: Response
+  port: 8080
+  path: "/api/v1/*"
+  method: GET
+  delay: "500ms"
+  duration: "5m"
+---
+# HTTP Abort - Returns error responses
+apiVersion: chaos-mesh.org/v1alpha1
+kind: HTTPChaos
+metadata:
+  name: http-abort-checkout
+  namespace: shop
+  labels:
+    experiment: http-chaos
+    severity: high
+spec:
+  mode: fixed-percent
+  value: "20"
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: core-service
+  target: Response
+  port: 8080
+  path: "/api/v1/checkout/*"
+  method: POST
+  abort: true
+  duration: "3m"
+---
+# HTTP Replace Response
+apiVersion: chaos-mesh.org/v1alpha1
+kind: HTTPChaos
+metadata:
+  name: http-replace-products
+  namespace: shop
+  labels:
+    experiment: http-chaos
+    severity: low
+spec:
+  mode: fixed-percent
+  value: "10"
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: core-service
+  target: Response
+  port: 8080
+  path: "/api/v1/products/*"
+  method: GET
+  replace:
+    code: 503
+    body: '{"error": "Service temporarily unavailable"}'
+  duration: "5m"
+---
+# HTTP Patch Headers
+apiVersion: chaos-mesh.org/v1alpha1
+kind: HTTPChaos
+metadata:
+  name: http-patch-headers
+  namespace: shop
+  labels:
+    experiment: http-chaos
+    severity: low
+spec:
+  mode: all
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: core-service
+  target: Response
+  port: 8080
+  path: "*"
+  patch:
+    headers:
+      - ["X-Chaos-Test", "true"]
+  duration: "10m"

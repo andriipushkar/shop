@@ -1,0 +1,60 @@
+---
+# Shop Platform Domains
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: e-commerce
+  description: E-commerce domain covering all shopping functionality
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+spec:
+  owner: platform-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: fulfillment
+  description: Order fulfillment and logistics
+spec:
+  owner: fulfillment-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: customer-engagement
+  description: Customer relationship and engagement
+spec:
+  owner: crm-team
+---
+# Systems
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: shop-platform
+  description: Main shop e-commerce platform
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+  tags:
+    - e-commerce
+    - production
+spec:
+  owner: platform-team
+  domain: e-commerce
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: order-management
+  description: Order management and processing system
+spec:
+  owner: fulfillment-team
+  domain: fulfillment
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: customer-management
+  description: Customer relationship management system
+spec:
+  owner: crm-team
+  domain: customer-engagement

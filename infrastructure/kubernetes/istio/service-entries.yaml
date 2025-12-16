@@ -1,0 +1,159 @@
+---
+# External Service Entry - Payment Gateway (LiqPay)
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: liqpay-gateway
+  namespace: shop
+spec:
+  hosts:
+    - "www.liqpay.ua"
+    - "api.liqpay.ua"
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+# External Service Entry - Nova Poshta API
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: nova-poshta-api
+  namespace: shop
+spec:
+  hosts:
+    - "api.novaposhta.ua"
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+# External Service Entry - Twilio (SMS)
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: twilio-api
+  namespace: shop
+spec:
+  hosts:
+    - "api.twilio.com"
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+# External Service Entry - SendGrid (Email)
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: sendgrid-api
+  namespace: shop
+spec:
+  hosts:
+    - "api.sendgrid.com"
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+# External Service Entry - Telegram Bot API
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: telegram-api
+  namespace: shop
+spec:
+  hosts:
+    - "api.telegram.org"
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+# External Service Entry - Firebase (Push Notifications)
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: firebase-api
+  namespace: shop
+spec:
+  hosts:
+    - "fcm.googleapis.com"
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+# External Service Entry - Google Cloud Storage
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: gcs-storage
+  namespace: shop
+spec:
+  hosts:
+    - "storage.googleapis.com"
+    - "*.storage.googleapis.com"
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+# Virtual Service for External Services (timeout/retry)
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: external-services
+  namespace: shop
+spec:
+  hosts:
+    - "api.liqpay.ua"
+    - "api.novaposhta.ua"
+    - "api.twilio.com"
+    - "api.sendgrid.com"
+    - "api.telegram.org"
+  http:
+    - timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: connect-failure,refused-stream,unavailable,503
+      route:
+        - destination:
+            host: api.liqpay.ua
+          weight: 100
+---
+# Destination Rule for External Payment Services
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: liqpay-dr
+  namespace: shop
+spec:
+  host: api.liqpay.ua
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 10
+        connectTimeout: 10s
+      http:
+        h2UpgradePolicy: DO_NOT_UPGRADE
+        http1MaxPendingRequests: 10
+        maxRetries: 3
+    tls:
+      mode: SIMPLE
+      sni: api.liqpay.ua

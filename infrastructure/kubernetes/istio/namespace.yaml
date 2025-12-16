@@ -1,0 +1,25 @@
+---
+# Shop namespace with Istio sidecar injection enabled
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+  labels:
+    istio-injection: enabled
+    app.kubernetes.io/part-of: shop-platform
+---
+# Observability namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    istio-injection: enabled
+---
+# Data namespace for databases
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop-data
+  labels:
+    istio-injection: disabled  # Disable for databases

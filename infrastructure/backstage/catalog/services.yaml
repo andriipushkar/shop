@@ -1,0 +1,206 @@
+---
+# Core Service
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: core-service
+  description: Core API service for products, categories, search, and authentication
+  annotations:
+    backstage.io/techdocs-ref: dir:../../../docs
+    github.com/project-slug: shop-platform/core-service
+    grafana/dashboard-selector: "service=core-service"
+    prometheus.io/rule: "core_service_alerts"
+    pagerduty.com/service-id: ${PAGERDUTY_CORE_SERVICE}
+    kubernetes.io/namespace: shop
+    kubernetes.io/deployment: core-service
+  tags:
+    - go
+    - api
+    - critical
+  links:
+    - url: https://api.shop.example.com
+      title: Production API
+      icon: cloud
+    - url: https://grafana.shop.example.com/d/core-service
+      title: Grafana Dashboard
+      icon: dashboard
+    - url: https://jaeger.shop.example.com/search?service=core-service
+      title: Jaeger Traces
+      icon: search
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: shop-platform
+  providesApis:
+    - core-api
+    - search-api
+    - auth-api
+  consumesApis:
+    - oms-api
+    - crm-api
+  dependsOn:
+    - resource:postgres
+    - resource:redis
+    - resource:elasticsearch
+---
+# OMS Service
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: oms-service
+  description: Order Management System - handles orders, inventory, and payments
+  annotations:
+    backstage.io/techdocs-ref: dir:../../../docs
+    github.com/project-slug: shop-platform/oms-service
+    grafana/dashboard-selector: "service=oms-service"
+    kubernetes.io/namespace: shop
+    kubernetes.io/deployment: oms-service
+  tags:
+    - go
+    - orders
+    - payments
+    - critical
+spec:
+  type: service
+  lifecycle: production
+  owner: fulfillment-team
+  system: order-management
+  providesApis:
+    - oms-api
+    - inventory-api
+    - payment-api
+  consumesApis:
+    - core-api
+    - notification-api
+  dependsOn:
+    - resource:postgres
+    - resource:rabbitmq
+---
+# CRM Service
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: crm-service
+  description: Customer Relationship Management service
+  annotations:
+    backstage.io/techdocs-ref: dir:../../../docs
+    github.com/project-slug: shop-platform/crm-service
+    grafana/dashboard-selector: "service=crm-service"
+    kubernetes.io/namespace: shop
+    kubernetes.io/deployment: crm-service
+  tags:
+    - go
+    - crm
+    - customers
+spec:
+  type: service
+  lifecycle: production
+  owner: crm-team
+  system: customer-management
+  providesApis:
+    - crm-api
+  consumesApis:
+    - core-api
+    - oms-api
+  dependsOn:
+    - resource:postgres
+---
+# Notification Service
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: notification-service
+  description: Handles email, SMS, push notifications and Telegram messages
+  annotations:
+    backstage.io/techdocs-ref: dir:../../../docs
+    github.com/project-slug: shop-platform/notification-service
+    kubernetes.io/namespace: shop
+    kubernetes.io/deployment: notification-service
+  tags:
+    - go
+    - notifications
+    - messaging
+spec:
+  type: service
+  lifecycle: production
+  owner: platform-team
+  system: shop-platform
+  providesApis:
+    - notification-api
+  dependsOn:
+    - resource:rabbitmq
+---
+# Storefront
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: storefront
+  description: Next.js storefront application for customers
+  annotations:
+    backstage.io/techdocs-ref: dir:../../../docs
+    github.com/project-slug: shop-platform/storefront
+    lighthouse.com/website-url: https://shop.example.com
+    kubernetes.io/namespace: shop
+    kubernetes.io/deployment: storefront
+  tags:
+    - nextjs
+    - typescript
+    - frontend
+spec:
+  type: website
+  lifecycle: production
+  owner: frontend-team
+  system: shop-platform
+  consumesApis:
+    - core-api
+    - oms-api
+---
+# Admin Panel
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: admin-panel
+  description: Admin panel for managing the shop
+  annotations:
+    backstage.io/techdocs-ref: dir:../../../docs
+    github.com/project-slug: shop-platform/admin-panel
+    kubernetes.io/namespace: shop
+    kubernetes.io/deployment: admin-panel
+  tags:
+    - nextjs
+    - typescript
+    - admin
+spec:
+  type: website
+  lifecycle: production
+  owner: platform-team
+  system: shop-platform
+  consumesApis:
+    - core-api
+    - oms-api
+    - crm-api
+---
+# Analytics ETL
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: analytics-etl
+  description: ETL service for syncing data to ClickHouse
+  annotations:
+    backstage.io/techdocs-ref: dir:../../../docs
+    github.com/project-slug: shop-platform/analytics-etl
+    kubernetes.io/namespace: shop
+    kubernetes.io/deployment: analytics-etl
+  tags:
+    - go
+    - etl
+    - analytics
+spec:
+  type: service
+  lifecycle: production
+  owner: data-team
+  system: shop-platform
+  dependsOn:
+    - resource:postgres
+    - resource:clickhouse

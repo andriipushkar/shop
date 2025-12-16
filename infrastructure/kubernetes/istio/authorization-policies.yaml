@@ -1,0 +1,252 @@
+---
+# Deny all by default (Zero Trust)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-all
+  namespace: shop
+spec:
+  {}  # Empty spec denies all traffic
+---
+# Allow traffic from Istio Ingress Gateway
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-ingress-gateway
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: core-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"
+---
+# Core Service Authorization
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: core-service-policy
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: core-service
+  action: ALLOW
+  rules:
+    # Allow from storefront
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/shop/sa/storefront"
+      to:
+        - operation:
+            methods: ["GET", "POST"]
+            paths: ["/api/v1/*"]
+
+    # Allow from admin panel
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/shop/sa/admin-panel"
+      to:
+        - operation:
+            methods: ["GET", "POST", "PUT", "DELETE"]
+            paths: ["/api/v1/*", "/api/v2/*"]
+
+    # Allow from OMS service
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/shop/sa/oms-service"
+      to:
+        - operation:
+            methods: ["GET", "POST"]
+            paths: ["/api/internal/*"]
+
+    # Allow health checks
+    - to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/health", "/ready", "/metrics"]
+---
+# OMS Service Authorization
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: oms-service-policy
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: oms-service
+  action: ALLOW
+  rules:
+    # Allow from core service
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/shop/sa/core-service"
+      to:
+        - operation:
+            methods: ["GET", "POST", "PUT"]
+            paths: ["/api/orders/*", "/api/inventory/*"]
+
+    # Allow from CRM service
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/shop/sa/crm-service"
+      to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/api/orders/*"]
+
+    # Allow from notification service
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/shop/sa/notification-service"
+      to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/api/orders/*/status"]
+
+    # Health checks
+    - to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/health", "/ready", "/metrics"]
+---
+# CRM Service Authorization
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: crm-service-policy
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: crm-service
+  action: ALLOW
+  rules:
+    # Allow from core service
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/shop/sa/core-service"
+      to:
+        - operation:
+            methods: ["GET", "POST", "PUT"]
+            paths: ["/api/customers/*", "/api/segments/*"]
+
+    # Allow from admin panel
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/shop/sa/admin-panel"
+      to:
+        - operation:
+            methods: ["GET", "POST", "PUT", "DELETE"]
+            paths: ["/api/*"]
+
+    # Health checks
+    - to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/health", "/ready", "/metrics"]
+---
+# Notification Service Authorization
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: notification-service-policy
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: notification-service
+  action: ALLOW
+  rules:
+    # Allow from core service
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/shop/sa/core-service"
+      to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/api/notifications/*"]
+
+    # Allow from OMS service
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/shop/sa/oms-service"
+      to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/api/notifications/*"]
+
+    # Health checks
+    - to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/health", "/ready", "/metrics"]
+---
+# Storefront Authorization (public access via ingress)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: storefront-policy
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: storefront
+  action: ALLOW
+  rules:
+    # Allow from ingress
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"
+      to:
+        - operation:
+            methods: ["GET", "POST"]
+
+    # Health checks
+    - to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/health", "/ready"]
+---
+# Admin Panel Authorization (restricted access)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: admin-panel-policy
+  namespace: shop
+spec:
+  selector:
+    matchLabels:
+      app: admin-panel
+  action: ALLOW
+  rules:
+    # Allow from ingress with JWT claims
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"
+      when:
+        - key: request.auth.claims[role]
+          values: ["admin", "superadmin"]
+
+    # Health checks
+    - to:
+        - operation:
+            methods: ["GET"]
+            paths: ["/health", "/ready"]

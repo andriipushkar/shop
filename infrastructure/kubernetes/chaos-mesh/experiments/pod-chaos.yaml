@@ -1,0 +1,84 @@
+---
+# Pod Kill Experiment - Tests pod recovery
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-kill-core-service
+  namespace: shop
+  labels:
+    experiment: pod-chaos
+    severity: medium
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: core-service
+      version: stable
+  duration: "30s"
+  scheduler:
+    cron: "@every 6h"
+---
+# Pod Failure Experiment - Simulates container crash
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-failure-oms
+  namespace: shop
+  labels:
+    experiment: pod-chaos
+    severity: medium
+spec:
+  action: pod-failure
+  mode: fixed-percent
+  value: "30"
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: oms-service
+  duration: "60s"
+---
+# Container Kill Experiment - Kills specific container
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: container-kill-notification
+  namespace: shop
+  labels:
+    experiment: pod-chaos
+    severity: low
+spec:
+  action: container-kill
+  mode: one
+  containerNames:
+    - notification-service
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: notification-service
+  duration: "30s"
+---
+# Scheduled Pod Kill for resilience testing
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: scheduled-pod-kill
+  namespace: shop
+spec:
+  schedule: "0 */4 * * *"  # Every 4 hours
+  type: PodChaos
+  podChaos:
+    action: pod-kill
+    mode: one
+    selector:
+      namespaces:
+        - shop
+      labelSelectors:
+        chaos-enabled: "true"
+    duration: "30s"
+  concurrencyPolicy: Forbid
+  historyLimit: 5

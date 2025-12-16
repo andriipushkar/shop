@@ -1,0 +1,189 @@
+---
+# Chaos Workflow - Comprehensive resilience test
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Workflow
+metadata:
+  name: shop-resilience-test
+  namespace: shop
+  labels:
+    experiment: workflow
+spec:
+  entry: resilience-test-entry
+  templates:
+    - name: resilience-test-entry
+      templateType: Serial
+      deadline: "1h"
+      children:
+        - network-delay-phase
+        - recovery-check-1
+        - pod-failure-phase
+        - recovery-check-2
+        - stress-test-phase
+        - recovery-check-3
+        - combined-chaos-phase
+
+    # Phase 1: Network Delay
+    - name: network-delay-phase
+      templateType: NetworkChaos
+      deadline: "10m"
+      networkChaos:
+        action: delay
+        mode: all
+        selector:
+          namespaces:
+            - shop
+          labelSelectors:
+            chaos-enabled: "true"
+        delay:
+          latency: "200ms"
+          jitter: "50ms"
+        duration: "5m"
+
+    # Recovery Check 1
+    - name: recovery-check-1
+      templateType: Suspend
+      deadline: "3m"
+      suspend:
+        duration: "2m"
+
+    # Phase 2: Pod Failure
+    - name: pod-failure-phase
+      templateType: PodChaos
+      deadline: "10m"
+      podChaos:
+        action: pod-failure
+        mode: fixed-percent
+        value: "30"
+        selector:
+          namespaces:
+            - shop
+          labelSelectors:
+            chaos-enabled: "true"
+        duration: "3m"
+
+    # Recovery Check 2
+    - name: recovery-check-2
+      templateType: Suspend
+      deadline: "5m"
+      suspend:
+        duration: "3m"
+
+    # Phase 3: Stress Test
+    - name: stress-test-phase
+      templateType: StressChaos
+      deadline: "15m"
+      stressChaos:
+        mode: fixed-percent
+        value: "50"
+        selector:
+          namespaces:
+            - shop
+          labelSelectors:
+            chaos-enabled: "true"
+        stressors:
+          cpu:
+            workers: 1
+            load: 70
+        duration: "10m"
+
+    # Recovery Check 3
+    - name: recovery-check-3
+      templateType: Suspend
+      deadline: "5m"
+      suspend:
+        duration: "3m"
+
+    # Phase 4: Combined Chaos
+    - name: combined-chaos-phase
+      templateType: Parallel
+      deadline: "15m"
+      children:
+        - final-network-chaos
+        - final-pod-chaos
+
+    - name: final-network-chaos
+      templateType: NetworkChaos
+      deadline: "10m"
+      networkChaos:
+        action: loss
+        mode: fixed-percent
+        value: "50"
+        selector:
+          namespaces:
+            - shop
+          labelSelectors:
+            app: core-service
+        loss:
+          loss: "5"
+        direction: to
+        target:
+          selector:
+            namespaces:
+              - shop
+            labelSelectors:
+              app: oms-service
+          mode: all
+        duration: "5m"
+
+    - name: final-pod-chaos
+      templateType: PodChaos
+      deadline: "10m"
+      podChaos:
+        action: pod-kill
+        mode: one
+        selector:
+          namespaces:
+            - shop
+          labelSelectors:
+            chaos-enabled: "true"
+        duration: "30s"
+---
+# Scheduled Weekly Resilience Test
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: weekly-resilience-test
+  namespace: shop
+spec:
+  schedule: "0 2 * * 0"  # Every Sunday at 2 AM
+  type: Workflow
+  workflow:
+    entry: weekly-entry
+    templates:
+      - name: weekly-entry
+        templateType: Serial
+        deadline: "30m"
+        children:
+          - light-network-chaos
+          - light-pod-chaos
+
+      - name: light-network-chaos
+        templateType: NetworkChaos
+        deadline: "10m"
+        networkChaos:
+          action: delay
+          mode: fixed-percent
+          value: "30"
+          selector:
+            namespaces:
+              - shop
+            labelSelectors:
+              chaos-enabled: "true"
+          delay:
+            latency: "100ms"
+          duration: "5m"
+
+      - name: light-pod-chaos
+        templateType: PodChaos
+        deadline: "10m"
+        podChaos:
+          action: pod-failure
+          mode: one
+          selector:
+            namespaces:
+              - shop
+            labelSelectors:
+              chaos-enabled: "true"
+          duration: "2m"
+  concurrencyPolicy: Forbid
+  historyLimit: 10

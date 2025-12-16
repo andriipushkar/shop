@@ -1,0 +1,155 @@
+# Backstage Configuration
+# Internal Developer Portal for Shop Platform
+
+app:
+  title: Shop Developer Portal
+  baseUrl: https://backstage.shop.example.com
+
+organization:
+  name: Shop Platform
+
+backend:
+  baseUrl: https://backstage.shop.example.com
+  listen:
+    port: 7007
+  csp:
+    connect-src: ["'self'", 'http:', 'https:']
+  cors:
+    origin: https://backstage.shop.example.com
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
+  database:
+    client: pg
+    connection:
+      host: ${POSTGRES_HOST}
+      port: ${POSTGRES_PORT}
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+  cache:
+    store: redis
+    connection: redis://${REDIS_HOST}:6379
+
+integrations:
+  github:
+    - host: github.com
+      token: ${GITHUB_TOKEN}
+
+proxy:
+  '/grafana/api':
+    target: http://grafana:3000
+    headers:
+      Authorization: Bearer ${GRAFANA_TOKEN}
+
+  '/prometheus/api':
+    target: http://prometheus:9090
+
+  '/jaeger':
+    target: http://jaeger:16686
+
+techdocs:
+  builder: 'local'
+  generator:
+    runIn: 'docker'
+  publisher:
+    type: 'googleGcs'
+    googleGcs:
+      bucketName: shop-techdocs
+      projectId: ${GCP_PROJECT_ID}
+
+auth:
+  environment: production
+  providers:
+    google:
+      production:
+        clientId: ${GOOGLE_CLIENT_ID}
+        clientSecret: ${GOOGLE_CLIENT_SECRET}
+    github:
+      production:
+        clientId: ${GITHUB_CLIENT_ID}
+        clientSecret: ${GITHUB_CLIENT_SECRET}
+
+scaffolder:
+  defaultAuthor:
+    name: Shop Platform
+    email: platform@shop.example.com
+  defaultCommitMessage: "Initial commit from Backstage scaffolder"
+
+catalog:
+  import:
+    entityFilename: catalog-info.yaml
+    pullRequestBranchName: backstage-integration
+  rules:
+    - allow: [Component, System, API, Resource, Location, Template, Group, User, Domain]
+  locations:
+    # Local catalog entities
+    - type: file
+      target: ./catalog/all.yaml
+      rules:
+        - allow: [Component, System, API, Resource, Location, Domain, Group]
+
+    # GitHub discovery
+    - type: github-discovery
+      target: https://github.com/shop-platform/*/blob/main/catalog-info.yaml
+
+    # Templates
+    - type: file
+      target: ./templates/all.yaml
+      rules:
+        - allow: [Template]
+
+kubernetes:
+  serviceLocatorMethod:
+    type: 'multiTenant'
+  clusterLocatorMethods:
+    - type: 'gke'
+      projectId: ${GCP_PROJECT_ID}
+      region: europe-west1
+      skipTLSVerify: false
+      skipMetricsLookup: false
+      exposeDashboard: true
+
+    - type: 'config'
+      clusters:
+        - url: ${K8S_PRIMARY_CLUSTER_URL}
+          name: shop-production-primary
+          authProvider: 'serviceAccount'
+          skipTLSVerify: false
+          serviceAccountToken: ${K8S_SERVICE_ACCOUNT_TOKEN}
+          dashboardUrl: https://console.cloud.google.com/kubernetes
+          dashboardApp: gke
+
+        - url: ${K8S_SECONDARY_CLUSTER_URL}
+          name: shop-production-secondary
+          authProvider: 'serviceAccount'
+          skipTLSVerify: false
+          serviceAccountToken: ${K8S_SERVICE_ACCOUNT_TOKEN}
+
+pagerduty:
+  eventsBaseUrl: 'https://events.pagerduty.com/v2'
+
+costInsights:
+  engineerCost: 200000  # Annual cost per engineer in UAH
+  products:
+    computeEngine:
+      name: Compute
+      icon: compute
+    cloudSQL:
+      name: Cloud SQL
+      icon: storage
+    cloudStorage:
+      name: Cloud Storage
+      icon: storage
+    kubernetes:
+      name: Kubernetes
+      icon: kubernetes
+
+search:
+  pg:
+    highlightOptions:
+      useHighlight: true
+      maxWord: 35
+      minWord: 15
+      shortWord: 3
+      highlightAll: false
+      maxFragments: 0
+      fragmentDelimiter: ' ... '

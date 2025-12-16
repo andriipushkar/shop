@@ -1,0 +1,199 @@
+---
+# PostgreSQL Database
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: postgres
+  description: PostgreSQL database for transactional data
+  annotations:
+    grafana/dashboard-selector: "database=postgres"
+  tags:
+    - database
+    - postgresql
+spec:
+  type: database
+  owner: platform-team
+  system: shop-platform
+---
+# Redis Cache
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: redis
+  description: Redis cache and session store
+  tags:
+    - cache
+    - redis
+spec:
+  type: cache
+  owner: platform-team
+  system: shop-platform
+---
+# Elasticsearch
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: elasticsearch
+  description: Elasticsearch for product search
+  tags:
+    - search
+    - elasticsearch
+spec:
+  type: search-engine
+  owner: platform-team
+  system: shop-platform
+---
+# RabbitMQ
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: rabbitmq
+  description: RabbitMQ message broker
+  tags:
+    - messaging
+    - rabbitmq
+spec:
+  type: message-broker
+  owner: platform-team
+  system: shop-platform
+---
+# ClickHouse
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: clickhouse
+  description: ClickHouse OLAP database for analytics
+  tags:
+    - analytics
+    - clickhouse
+    - olap
+spec:
+  type: database
+  owner: data-team
+  system: shop-platform
+---
+# APIs
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: core-api
+  description: Core Service REST API
+  annotations:
+    backstage.io/techdocs-ref: dir:../../../docs/api
+  tags:
+    - rest
+    - openapi
+spec:
+  type: openapi
+  lifecycle: production
+  owner: platform-team
+  system: shop-platform
+  definition:
+    $text: https://api.shop.example.com/api/v1/openapi.json
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: oms-api
+  description: Order Management System API
+  tags:
+    - rest
+    - openapi
+spec:
+  type: openapi
+  lifecycle: production
+  owner: fulfillment-team
+  system: order-management
+  definition:
+    $text: https://api.shop.example.com/oms/openapi.json
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: crm-api
+  description: CRM Service API
+  tags:
+    - rest
+    - openapi
+spec:
+  type: openapi
+  lifecycle: production
+  owner: crm-team
+  system: customer-management
+  definition:
+    $text: https://api.shop.example.com/crm/openapi.json
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: notification-api
+  description: Notification Service API
+  tags:
+    - rest
+    - async
+spec:
+  type: openapi
+  lifecycle: production
+  owner: platform-team
+  system: shop-platform
+---
+# Teams
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-team
+  description: Platform engineering team
+spec:
+  type: team
+  profile:
+    displayName: Platform Team
+    email: platform@shop.example.com
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: fulfillment-team
+  description: Order fulfillment team
+spec:
+  type: team
+  profile:
+    displayName: Fulfillment Team
+    email: fulfillment@shop.example.com
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: crm-team
+  description: Customer relationship team
+spec:
+  type: team
+  profile:
+    displayName: CRM Team
+    email: crm@shop.example.com
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: frontend-team
+  description: Frontend development team
+spec:
+  type: team
+  profile:
+    displayName: Frontend Team
+    email: frontend@shop.example.com
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: data-team
+  description: Data and analytics team
+spec:
+  type: team
+  profile:
+    displayName: Data Team
+    email: data@shop.example.com
+  children: []

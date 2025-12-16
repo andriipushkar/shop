@@ -1,0 +1,265 @@
+---
+# HashiCorp Vault Configuration for Kubernetes
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault
+  labels:
+    name: vault
+---
+# Vault Helm Values ConfigMap (for reference)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-helm-values
+  namespace: vault
+data:
+  values.yaml: |
+    global:
+      enabled: true
+      tlsDisable: false
+
+    injector:
+      enabled: true
+      replicas: 2
+      resources:
+        requests:
+          memory: 256Mi
+          cpu: 250m
+        limits:
+          memory: 512Mi
+          cpu: 500m
+
+    server:
+      enabled: true
+      replicas: 3
+
+      resources:
+        requests:
+          memory: 256Mi
+          cpu: 250m
+        limits:
+          memory: 512Mi
+          cpu: 500m
+
+      # High Availability
+      ha:
+        enabled: true
+        replicas: 3
+        raft:
+          enabled: true
+          setNodeId: true
+          config: |
+            cluster_name = "vault-shop"
+            ui = true
+            listener "tcp" {
+              tls_disable = 0
+              address = "[::]:8200"
+              cluster_address = "[::]:8201"
+              tls_cert_file = "/vault/userconfig/vault-server-tls/vault.crt"
+              tls_key_file  = "/vault/userconfig/vault-server-tls/vault.key"
+              tls_client_ca_file = "/vault/userconfig/vault-server-tls/vault.ca"
+            }
+            storage "raft" {
+              path = "/vault/data"
+              retry_join {
+                leader_api_addr = "https://vault-0.vault-internal:8200"
+                leader_ca_cert_file = "/vault/userconfig/vault-server-tls/vault.ca"
+              }
+              retry_join {
+                leader_api_addr = "https://vault-1.vault-internal:8200"
+                leader_ca_cert_file = "/vault/userconfig/vault-server-tls/vault.ca"
+              }
+              retry_join {
+                leader_api_addr = "https://vault-2.vault-internal:8200"
+                leader_ca_cert_file = "/vault/userconfig/vault-server-tls/vault.ca"
+              }
+            }
+            service_registration "kubernetes" {}
+            seal "gcpckms" {
+              project     = "shop-production"
+              region      = "europe-west1"
+              key_ring    = "vault-keyring"
+              crypto_key  = "vault-key"
+            }
+
+      # Audit logging
+      auditStorage:
+        enabled: true
+        size: 10Gi
+
+      # Ingress
+      ingress:
+        enabled: true
+        ingressClassName: "nginx"
+        hosts:
+          - host: vault.shop.example.com
+        tls:
+          - secretName: vault-tls
+            hosts:
+              - vault.shop.example.com
+
+    ui:
+      enabled: true
+      serviceType: "ClusterIP"
+---
+# Vault Auth Method - Kubernetes
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-k8s-auth-config
+  namespace: vault
+data:
+  configure.sh: |
+    #!/bin/sh
+    vault auth enable kubernetes
+
+    vault write auth/kubernetes/config \
+      kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443" \
+      token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+      kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+      issuer="https://kubernetes.default.svc.cluster.local"
+---
+# Vault Policy for Shop Application
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-shop-policy
+  namespace: vault
+data:
+  shop-policy.hcl: |
+    # Policy for Shop application secrets
+
+    # Database credentials
+    path "secret/data/shop/database/*" {
+      capabilities = ["read"]
+    }
+
+    # API keys
+    path "secret/data/shop/api-keys/*" {
+      capabilities = ["read"]
+    }
+
+    # Payment gateway secrets
+    path "secret/data/shop/payment/*" {
+      capabilities = ["read"]
+    }
+
+    # JWT signing keys
+    path "secret/data/shop/jwt/*" {
+      capabilities = ["read"]
+    }
+
+    # External service credentials
+    path "secret/data/shop/external/*" {
+      capabilities = ["read"]
+    }
+
+    # Dynamic database credentials
+    path "database/creds/shop-*" {
+      capabilities = ["read"]
+    }
+
+    # Transit encryption
+    path "transit/encrypt/shop" {
+      capabilities = ["update"]
+    }
+
+    path "transit/decrypt/shop" {
+      capabilities = ["update"]
+    }
+---
+# Vault Role for Core Service
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-core-service-role
+  namespace: vault
+data:
+  configure.sh: |
+    #!/bin/sh
+    vault write auth/kubernetes/role/core-service \
+      bound_service_account_names=core-service \
+      bound_service_account_namespaces=shop \
+      policies=shop-policy \
+      ttl=24h
+
+    vault write auth/kubernetes/role/oms-service \
+      bound_service_account_names=oms-service \
+      bound_service_account_namespaces=shop \
+      policies=shop-policy \
+      ttl=24h
+
+    vault write auth/kubernetes/role/crm-service \
+      bound_service_account_names=crm-service \
+      bound_service_account_namespaces=shop \
+      policies=shop-policy \
+      ttl=24h
+
+    vault write auth/kubernetes/role/notification-service \
+      bound_service_account_names=notification-service \
+      bound_service_account_namespaces=shop \
+      policies=shop-policy \
+      ttl=24h
+---
+# Vault Secrets Operator CRD Example
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultAuth
+metadata:
+  name: shop-auth
+  namespace: shop
+spec:
+  method: kubernetes
+  mount: kubernetes
+  kubernetes:
+    role: core-service
+    serviceAccount: core-service
+    audiences:
+      - vault
+---
+# Database Secret Sync
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: database-credentials
+  namespace: shop
+spec:
+  type: kv-v2
+  mount: secret
+  path: shop/database/postgres
+  destination:
+    name: database-credentials
+    create: true
+  refreshAfter: 30s
+  vaultAuthRef: shop-auth
+---
+# Payment Gateway Secret Sync
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: liqpay-credentials
+  namespace: shop
+spec:
+  type: kv-v2
+  mount: secret
+  path: shop/payment/liqpay
+  destination:
+    name: liqpay-credentials
+    create: true
+  refreshAfter: 30s
+  vaultAuthRef: shop-auth
+---
+# Dynamic Database Credentials
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultDynamicSecret
+metadata:
+  name: postgres-dynamic-creds
+  namespace: shop
+spec:
+  mount: database
+  path: creds/shop-app
+  destination:
+    name: postgres-dynamic-credentials
+    create: true
+  renewalPercent: 67
+  vaultAuthRef: shop-auth

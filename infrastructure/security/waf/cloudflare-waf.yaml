@@ -1,0 +1,201 @@
+---
+# WAF Configuration (Cloudflare-style rules)
+# This can be applied via Terraform or Cloudflare API
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: waf-rules-config
+  namespace: shop
+data:
+  waf-rules.json: |
+    {
+      "rules": [
+        {
+          "id": "shop-waf-001",
+          "description": "Block SQL Injection attempts",
+          "expression": "(http.request.uri.query contains \"union select\" or http.request.uri.query contains \"' or '1'='1\" or http.request.body.raw contains \"union select\")",
+          "action": "block",
+          "enabled": true,
+          "priority": 1
+        },
+        {
+          "id": "shop-waf-002",
+          "description": "Block XSS attempts",
+          "expression": "(http.request.uri.query contains \"<script\" or http.request.body.raw contains \"<script\" or http.request.uri.query contains \"javascript:\")",
+          "action": "block",
+          "enabled": true,
+          "priority": 2
+        },
+        {
+          "id": "shop-waf-003",
+          "description": "Block path traversal",
+          "expression": "(http.request.uri.path contains \"../\" or http.request.uri.path contains \"..\\\\\")",
+          "action": "block",
+          "enabled": true,
+          "priority": 3
+        },
+        {
+          "id": "shop-waf-004",
+          "description": "Block sensitive file access",
+          "expression": "(http.request.uri.path contains \".env\" or http.request.uri.path contains \".git\" or http.request.uri.path contains \"wp-config\" or http.request.uri.path contains \".htaccess\")",
+          "action": "block",
+          "enabled": true,
+          "priority": 4
+        },
+        {
+          "id": "shop-waf-005",
+          "description": "Rate limit login attempts",
+          "expression": "http.request.uri.path eq \"/api/v1/auth/login\"",
+          "action": "rate_limit",
+          "rate_limit": {
+            "requests_per_period": 10,
+            "period": 60
+          },
+          "enabled": true,
+          "priority": 5
+        },
+        {
+          "id": "shop-waf-006",
+          "description": "Rate limit API requests",
+          "expression": "http.request.uri.path matches \"^/api/\"",
+          "action": "rate_limit",
+          "rate_limit": {
+            "requests_per_period": 100,
+            "period": 60
+          },
+          "enabled": true,
+          "priority": 6
+        },
+        {
+          "id": "shop-waf-007",
+          "description": "Block suspicious user agents",
+          "expression": "(http.user_agent contains \"sqlmap\" or http.user_agent contains \"nikto\" or http.user_agent contains \"nmap\" or http.user_agent eq \"\")",
+          "action": "challenge",
+          "enabled": true,
+          "priority": 7
+        },
+        {
+          "id": "shop-waf-008",
+          "description": "Geographic restriction (block high-risk countries)",
+          "expression": "ip.geoip.country in {\"RU\" \"CN\" \"KP\" \"IR\"}",
+          "action": "challenge",
+          "enabled": false,
+          "priority": 8
+        },
+        {
+          "id": "shop-waf-009",
+          "description": "Protect checkout endpoint",
+          "expression": "http.request.uri.path matches \"^/api/v1/checkout\" and http.request.method eq \"POST\"",
+          "action": "challenge",
+          "enabled": true,
+          "priority": 9
+        },
+        {
+          "id": "shop-waf-010",
+          "description": "Block known malicious IPs (updated dynamically)",
+          "expression": "ip.src in $malicious_ips",
+          "action": "block",
+          "enabled": true,
+          "priority": 10
+        }
+      ],
+      "managed_rulesets": [
+        "cloudflare_managed_ruleset",
+        "cloudflare_owasp_core_ruleset"
+      ],
+      "security_level": "high",
+      "challenge_passage": 1800,
+      "browser_integrity_check": true,
+      "email_obfuscation": true,
+      "server_side_excludes": true
+    }
+---
+# ModSecurity Rules for NGINX Ingress (alternative to Cloudflare)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: modsecurity-rules
+  namespace: ingress-nginx
+data:
+  modsecurity.conf: |
+    SecRuleEngine On
+    SecRequestBodyAccess On
+    SecRule REQUEST_HEADERS:Content-Type "text/xml" \
+         "id:'200000',phase:1,t:none,t:lowercase,pass,nolog,ctl:requestBodyProcessor=XML"
+    SecRequestBodyLimit 13107200
+    SecRequestBodyNoFilesLimit 131072
+    SecRequestBodyInMemoryLimit 131072
+    SecRequestBodyLimitAction Reject
+    SecRule REQBODY_ERROR "!@eq 0" \
+         "id:'200001', phase:2,t:none,log,deny,status:400,msg:'Failed to parse request body.',logdata:'%{reqbody_error_msg}',severity:2"
+    SecRule MULTIPART_STRICT_ERROR "!@eq 0" \
+         "id:'200002',phase:2,t:none,log,deny,status:400,msg:'Multipart request body failed strict validation.',severity:2"
+    SecRule MULTIPART_UNMATCHED_BOUNDARY "!@eq 0" \
+         "id:'200003',phase:2,t:none,log,deny,msg:'Multipart parser detected a possible unmatched boundary.',severity:2"
+    SecPcreMatchLimit 1000
+    SecPcreMatchLimitRecursion 1000
+    SecRule TX:/^MSC_/ "!@streq 0" \
+         "id:'200004',phase:2,t:none,deny,msg:'ModSecurity internal error flagged: %{MATCHED_VAR_NAME}'"
+    SecResponseBodyAccess Off
+    SecDebugLogLevel 0
+    SecAuditEngine RelevantOnly
+    SecAuditLogRelevantStatus "^(?:5|4(?!04))"
+    SecAuditLogParts ABIJDEFHZ
+    SecAuditLogType Serial
+    SecArgumentSeparator &
+    SecCookieFormat 0
+    SecUnicodeMapFile unicode.mapping 20127
+    SecStatusEngine On
+
+  custom-rules.conf: |
+    # Custom WAF Rules for Shop Application
+
+    # Block SQL Injection
+    SecRule ARGS "@rx (?i:(?:union.*select|select.*from|insert.*into|delete.*from|drop.*table|update.*set))" \
+        "id:1001,phase:2,deny,status:403,msg:'SQL Injection Attempt',severity:CRITICAL"
+
+    # Block XSS
+    SecRule ARGS "@rx (?i:<script[^>]*>.*?</script>|javascript:|on\w+\s*=)" \
+        "id:1002,phase:2,deny,status:403,msg:'XSS Attempt',severity:CRITICAL"
+
+    # Block Path Traversal
+    SecRule REQUEST_URI "@rx (\.\.\/|\.\.\\)" \
+        "id:1003,phase:1,deny,status:403,msg:'Path Traversal Attempt',severity:CRITICAL"
+
+    # Rate Limiting for Login
+    SecRule REQUEST_URI "@streq /api/v1/auth/login" \
+        "id:1004,phase:1,pass,nolog,setvar:ip.login_counter=+1,expirevar:ip.login_counter=60"
+    SecRule IP:LOGIN_COUNTER "@gt 10" \
+        "id:1005,phase:1,deny,status:429,msg:'Login Rate Limit Exceeded'"
+
+    # Block Sensitive File Access
+    SecRule REQUEST_URI "@rx (?:\.env|\.git|wp-config|\.htaccess|composer\.json|package\.json)" \
+        "id:1006,phase:1,deny,status:403,msg:'Sensitive File Access Attempt',severity:HIGH"
+
+    # Protect Admin Endpoints
+    SecRule REQUEST_URI "@beginsWith /admin" \
+        "id:1007,phase:1,chain,deny,status:403,msg:'Unauthorized Admin Access'"
+    SecRule &REQUEST_HEADERS:X-Admin-Token "@eq 0"
+---
+# Network Policy for WAF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: waf-network-policy
+  namespace: shop
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+      ports:
+        - protocol: TCP
+          port: 8080

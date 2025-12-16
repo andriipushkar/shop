@@ -1,0 +1,189 @@
+---
+# Core Service Virtual Service
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: core-service
+  namespace: shop
+spec:
+  hosts:
+    - "api.shop.example.com"
+    - "core-service"
+  gateways:
+    - shop-gateway
+    - mesh
+  http:
+    # API versioning
+    - match:
+        - uri:
+            prefix: /api/v2/
+      route:
+        - destination:
+            host: core-service
+            subset: v2
+          weight: 100
+
+    # Canary deployment (10% traffic to new version)
+    - match:
+        - uri:
+            prefix: /api/v1/
+      route:
+        - destination:
+            host: core-service
+            subset: stable
+          weight: 90
+        - destination:
+            host: core-service
+            subset: canary
+          weight: 10
+
+    # Default route
+    - route:
+        - destination:
+            host: core-service
+            subset: stable
+      timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: connect-failure,refused-stream,unavailable,cancelled,retriable-4xx,503
+---
+# OMS Service Virtual Service
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: oms-service
+  namespace: shop
+spec:
+  hosts:
+    - "oms-service"
+  http:
+    - match:
+        - headers:
+            x-tenant-id:
+              exact: "premium"
+      route:
+        - destination:
+            host: oms-service
+            subset: premium
+      timeout: 60s
+
+    - route:
+        - destination:
+            host: oms-service
+            subset: stable
+      timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+---
+# CRM Service Virtual Service
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: crm-service
+  namespace: shop
+spec:
+  hosts:
+    - "crm-service"
+  http:
+    - route:
+        - destination:
+            host: crm-service
+            subset: stable
+      timeout: 30s
+      retries:
+        attempts: 2
+        perTryTimeout: 15s
+---
+# Storefront Virtual Service
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: storefront
+  namespace: shop
+spec:
+  hosts:
+    - "shop.example.com"
+    - "storefront"
+  gateways:
+    - shop-gateway
+    - mesh
+  http:
+    # Static assets - longer cache
+    - match:
+        - uri:
+            prefix: /_next/static/
+      route:
+        - destination:
+            host: storefront
+            subset: stable
+      headers:
+        response:
+          set:
+            cache-control: "public, max-age=31536000, immutable"
+
+    # API routes to backend
+    - match:
+        - uri:
+            prefix: /api/
+      route:
+        - destination:
+            host: core-service
+            subset: stable
+
+    # Default frontend route
+    - route:
+        - destination:
+            host: storefront
+            subset: stable
+      timeout: 10s
+---
+# Admin Panel Virtual Service
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: admin-panel
+  namespace: shop
+spec:
+  hosts:
+    - "admin.shop.example.com"
+    - "admin-panel"
+  gateways:
+    - shop-gateway
+    - mesh
+  http:
+    - match:
+        - headers:
+            x-admin-role:
+              exact: "superadmin"
+      route:
+        - destination:
+            host: superadmin
+            subset: stable
+
+    - route:
+        - destination:
+            host: admin-panel
+            subset: stable
+      timeout: 30s
+---
+# Notification Service Virtual Service
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: notification-service
+  namespace: shop
+spec:
+  hosts:
+    - "notification-service"
+  http:
+    - route:
+        - destination:
+            host: notification-service
+            subset: stable
+      timeout: 5s
+      retries:
+        attempts: 5
+        perTryTimeout: 1s
+        retryOn: connect-failure,refused-stream,unavailable

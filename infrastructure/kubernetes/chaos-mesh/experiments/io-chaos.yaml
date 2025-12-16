@@ -1,0 +1,67 @@
+---
+# IO Delay - Simulates slow disk
+apiVersion: chaos-mesh.org/v1alpha1
+kind: IOChaos
+metadata:
+  name: io-delay-analytics-etl
+  namespace: shop
+  labels:
+    experiment: io-chaos
+    severity: medium
+spec:
+  action: latency
+  mode: one
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: analytics-etl
+  volumePath: /data
+  delay: "100ms"
+  percent: 50
+  duration: "5m"
+---
+# IO Error - Simulates disk errors
+apiVersion: chaos-mesh.org/v1alpha1
+kind: IOChaos
+metadata:
+  name: io-error-core-service
+  namespace: shop
+  labels:
+    experiment: io-chaos
+    severity: high
+spec:
+  action: fault
+  mode: one
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: core-service
+  volumePath: /tmp
+  errno: 5  # EIO
+  percent: 10
+  duration: "3m"
+---
+# IO Attribute Modification
+apiVersion: chaos-mesh.org/v1alpha1
+kind: IOChaos
+metadata:
+  name: io-attr-modify
+  namespace: shop
+  labels:
+    experiment: io-chaos
+    severity: low
+spec:
+  action: attrOverride
+  mode: one
+  selector:
+    namespaces:
+      - shop
+    labelSelectors:
+      app: notification-service
+  volumePath: /logs
+  attr:
+    perm: 0644
+  percent: 100
+  duration: "5m"

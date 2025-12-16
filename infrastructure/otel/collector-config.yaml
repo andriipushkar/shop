@@ -1,0 +1,218 @@
+# OpenTelemetry Collector Configuration
+# Receives traces and metrics from services, processes them, and exports to backends
+
+receivers:
+  # OTLP receiver for traces and metrics
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus receiver for scraping metrics
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['localhost:8888']
+
+        - job_name: 'core-service'
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['core:8080']
+          metrics_path: /metrics
+
+        - job_name: 'oms-service'
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['oms:8081']
+          metrics_path: /metrics
+
+        - job_name: 'crm-service'
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['crm:8082']
+          metrics_path: /metrics
+
+        - job_name: 'clickhouse'
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['clickhouse:9363']
+          metrics_path: /metrics
+
+  # Host metrics receiver
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+      disk:
+      load:
+      filesystem:
+      memory:
+      network:
+      process:
+        include:
+          match_type: regexp
+          names: ['.*']
+
+processors:
+  # Batch processor for efficient export
+  batch:
+    send_batch_size: 1000
+    timeout: 10s
+    send_batch_max_size: 1500
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Add resource attributes
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: ${ENVIRONMENT:-development}
+        action: upsert
+      - key: service.namespace
+        value: shop
+        action: upsert
+
+  # Attributes processor for span enrichment
+  attributes:
+    actions:
+      - key: http.url
+        action: hash
+      - key: db.statement
+        action: hash
+
+  # Filter processor to drop unnecessary spans
+  filter:
+    spans:
+      exclude:
+        match_type: regexp
+        attributes:
+          - key: http.route
+            value: "^/health.*|^/metrics.*|^/ready.*"
+
+  # Tail sampling for intelligent trace sampling
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 100000
+    policies:
+      # Always sample errors
+      - name: errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      # Always sample slow requests (>500ms)
+      - name: slow-requests
+        type: latency
+        latency:
+          threshold_ms: 500
+      # Sample 10% of remaining traces
+      - name: probabilistic
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
+
+  # Span metrics connector - generate metrics from spans
+  spanmetrics:
+    histogram_explicit:
+      buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+    dimensions:
+      - name: http.method
+      - name: http.status_code
+      - name: service.name
+    dimensions_cache_size: 1000
+    aggregation_temporality: AGGREGATION_TEMPORALITY_CUMULATIVE
+
+exporters:
+  # Jaeger exporter for traces
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Prometheus exporter for metrics
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: shop
+    const_labels:
+      environment: ${ENVIRONMENT:-development}
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  # Prometheus Remote Write to existing Prometheus
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+
+  # Debug exporter for development
+  debug:
+    verbosity: basic
+
+  # ClickHouse exporter for long-term trace storage
+  clickhouse:
+    endpoint: tcp://clickhouse:9000?dial_timeout=10s&compress=lz4
+    database: shop_analytics
+    username: analytics
+    password: analytics_password
+    traces_table_name: otel_traces
+    logs_table_name: otel_logs
+    metrics_table_name: otel_metrics
+    ttl_days: 90
+    timeout: 30s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
+
+extensions:
+  # Health check extension
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  # Performance profiler
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+  # zPages for debugging
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes, filter, tail_sampling, batch]
+      exporters: [otlp/jaeger, clickhouse, debug]
+
+    # Metrics pipeline
+    metrics:
+      receivers: [otlp, prometheus, hostmetrics]
+      processors: [memory_limiter, resource, batch]
+      exporters: [prometheus, prometheusremotewrite, debug]
+
+    # Logs pipeline (future use)
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [clickhouse, debug]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888

@@ -1,0 +1,191 @@
+---
+# Trivy Operator for Continuous Vulnerability Scanning
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: trivy-system
+  labels:
+    app.kubernetes.io/name: trivy-operator
+---
+# Trivy Operator Helm Values (ConfigMap for reference)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trivy-operator-values
+  namespace: trivy-system
+data:
+  values.yaml: |
+    operator:
+      replicas: 1
+      scanJobTTL: 30m
+      scanJobsConcurrentLimit: 10
+      vulnerabilityScannerScanOnlyCurrentRevisions: true
+      configAuditScannerScanOnlyCurrentRevisions: true
+
+    trivy:
+      # Severity levels to report
+      severity: CRITICAL,HIGH,MEDIUM
+
+      # Ignore unfixed vulnerabilities
+      ignoreUnfixed: false
+
+      # Resources for scan jobs
+      resources:
+        requests:
+          cpu: 100m
+          memory: 100M
+        limits:
+          cpu: 500m
+          memory: 500M
+
+      # Image scan timeout
+      timeout: 10m0s
+
+      # Database repository
+      dbRepository: ghcr.io/aquasecurity/trivy-db
+
+      # Java DB repository (for JAR scanning)
+      javaDbRepository: ghcr.io/aquasecurity/trivy-java-db
+
+    serviceAccount:
+      create: true
+      name: trivy-operator
+
+    # RBAC configuration
+    rbac:
+      create: true
+
+    # Pod security context
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 10000
+
+    # Security context for containers
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+---
+# Custom Scan Policy
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trivy-scan-policy
+  namespace: trivy-system
+data:
+  policy.yaml: |
+    # Vulnerability scan policy
+    vulnerabilities:
+      # Fail deployment if critical vulnerabilities found
+      failOnCritical: true
+
+      # Score threshold (CVSS)
+      scoreThreshold: 7.0
+
+      # Ignored CVEs (known false positives or accepted risks)
+      ignoredCVEs:
+        - CVE-2023-XXXXX  # Example: Known false positive
+
+      # Package-specific ignores
+      ignoredPackages:
+        - package: "golang.org/x/net"
+          reason: "False positive in test code"
+          until: "2025-01-01"
+
+    # Compliance standards
+    compliance:
+      - NSA
+      - CIS
+---
+# Vulnerability Report CRD Example
+apiVersion: aquasecurity.github.io/v1alpha1
+kind: ClusterVulnerabilityReport
+metadata:
+  name: shop-vulnerability-summary
+spec:
+  scanJobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: trivy
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 100M
+                limits:
+                  cpu: 500m
+                  memory: 500M
+---
+# Config Audit Report
+apiVersion: aquasecurity.github.io/v1alpha1
+kind: ClusterConfigAuditReport
+metadata:
+  name: shop-config-audit
+spec:
+  scanner:
+    name: Trivy
+  summary:
+    criticalCount: 0
+    highCount: 0
+    mediumCount: 0
+    lowCount: 0
+---
+# Exposed Secret Report
+apiVersion: aquasecurity.github.io/v1alpha1
+kind: ExposedSecretReport
+metadata:
+  name: shop-exposed-secrets
+  namespace: shop
+spec:
+  scanner:
+    name: Trivy
+---
+# Alert Configuration for Prometheus
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trivy-alerts
+  namespace: monitoring
+data:
+  alerts.yaml: |
+    groups:
+      - name: trivy-security
+        rules:
+          - alert: CriticalVulnerabilityDetected
+            expr: trivy_image_vulnerabilities{severity="Critical"} > 0
+            for: 0m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Critical vulnerability detected in {{ $labels.image }}"
+              description: "Image {{ $labels.image }} has {{ $value }} critical vulnerabilities"
+
+          - alert: HighVulnerabilityThreshold
+            expr: sum(trivy_image_vulnerabilities{severity="High"}) > 10
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High vulnerability count exceeded threshold"
+              description: "Total high vulnerabilities: {{ $value }}"
+
+          - alert: ExposedSecretDetected
+            expr: trivy_exposed_secrets_total > 0
+            for: 0m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Exposed secret detected"
+              description: "{{ $value }} exposed secrets found in images"
+
+          - alert: ConfigMisconfiguration
+            expr: trivy_config_audits{severity="Critical"} > 0
+            for: 0m
+            labels:
+              severity: high
+            annotations:
+              summary: "Critical misconfiguration detected"
+              description: "{{ $labels.resource }} has critical misconfigurations"

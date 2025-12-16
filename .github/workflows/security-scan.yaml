@@ -1,0 +1,297 @@
+name: Security Scan Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # SAST - Static Application Security Testing
+  sast:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/golang
+            p/typescript
+            p/react
+            p/owasp-top-ten
+
+      - name: Run CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go, javascript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      - name: Run Gosec (Go Security)
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt sarif -out results.sarif ./...'
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+
+  # Secret Scanning
+  secrets:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect secrets with Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  # Dependency Scanning
+  dependencies:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          for dir in services/*/; do
+            echo "Scanning $dir"
+            cd $dir && govulncheck ./... || true
+            cd ../..
+          done
+
+      - name: Run npm audit
+        run: |
+          for dir in services/*/; do
+            if [ -f "$dir/package.json" ]; then
+              echo "Scanning $dir"
+              cd $dir && npm audit --audit-level=high || true
+              cd ../..
+            fi
+          done
+
+      - name: Trivy FS Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy FS results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-fs-results.sarif'
+
+  # Container Image Scanning
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    needs: [sast]
+    strategy:
+      matrix:
+        service: [core, oms, crm, notification, storefront, admin, analytics-etl]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }}/${{ matrix.service }}:${{ github.sha }} \
+            ./services/${{ matrix.service }}
+
+      - name: Trivy Container Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.IMAGE_NAME }}/${{ matrix.service }}:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-${{ matrix.service }}.sarif'
+          severity: 'CRITICAL,HIGH'
+          vuln-type: 'os,library'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-${{ matrix.service }}.sarif'
+
+      - name: Grype Container Scan
+        uses: anchore/scan-action@v3
+        with:
+          image: '${{ env.IMAGE_NAME }}/${{ matrix.service }}:${{ github.sha }}'
+          fail-build: true
+          severity-cutoff: high
+
+  # Infrastructure as Code Scanning
+  iac-scan:
+    name: IaC Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy IaC Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: './infrastructure'
+          format: 'sarif'
+          output: 'trivy-iac.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload IaC scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-iac.sarif'
+
+      - name: Checkov IaC Scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infrastructure/
+          framework: terraform,kubernetes,dockerfile
+          output_format: sarif
+          output_file_path: checkov.sarif
+          soft_fail: true
+
+      - name: tfsec Terraform Scan
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: infrastructure/terraform
+          format: sarif
+          soft_fail: true
+
+  # Kubernetes Security
+  k8s-scan:
+    name: Kubernetes Manifest Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kubesec Scan
+        uses: controlplaneio/kubesec-action@master
+        with:
+          input: infrastructure/kubernetes/
+
+      - name: Kube-linter Scan
+        uses: stackrox/kube-linter-action@v1
+        with:
+          directory: infrastructure/kubernetes/
+          config: .kube-linter.yaml
+
+      - name: Polaris Scan
+        run: |
+          curl -L https://github.com/FairwindsOps/polaris/releases/latest/download/polaris_linux_amd64.tar.gz | tar xz
+          ./polaris audit --audit-path ./infrastructure/kubernetes/ \
+            --format sarif > polaris.sarif
+
+      - name: Upload Polaris results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'polaris.sarif'
+
+  # License Compliance
+  license-check:
+    name: License Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Go License Check
+        run: |
+          go install github.com/google/go-licenses@latest
+          for dir in services/*/; do
+            if [ -f "$dir/go.mod" ]; then
+              echo "Checking licenses in $dir"
+              cd $dir && go-licenses check ./... --disallowed_types=forbidden,restricted || true
+              cd ../..
+            fi
+          done
+
+      - name: NPM License Check
+        run: |
+          npm install -g license-checker
+          for dir in services/*/; do
+            if [ -f "$dir/package.json" ]; then
+              echo "Checking licenses in $dir"
+              cd $dir && license-checker --failOn "GPL-3.0;AGPL-3.0" || true
+              cd ../..
+            fi
+          done
+
+  # SBOM Generation
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
+  # Security Report
+  security-report:
+    name: Security Report
+    runs-on: ubuntu-latest
+    needs: [sast, secrets, dependencies, container-scan, iac-scan, k8s-scan]
+    if: always()
+    steps:
+      - name: Create Security Summary
+        run: |
+          echo "# Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| SAST | ${{ needs.sast.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secrets | ${{ needs.secrets.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependencies | ${{ needs.dependencies.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Containers | ${{ needs.container-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| IaC | ${{ needs.iac-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Kubernetes | ${{ needs.k8s-scan.result }} |" >> $GITHUB_STEP_SUMMARY
